@@ -1,0 +1,18 @@
+# dependencias
+node_modules/
+
+# segredos - nunca versionar
+.env
+.env.local
+.env.*.local
+
+# artefatos de build
+artifacts/
+cache/
+typechain-types/
+dist/
+.vercel/
+
+# sistema
+.DS_Store
+Thumbs.db
