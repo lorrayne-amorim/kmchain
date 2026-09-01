@@ -1,0 +1,812 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "AccessControlBadConfirmation",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "neededRole",
+        "type": "bytes32"
+      }
+    ],
+    "name": "AccessControlUnauthorizedAccount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ChassiInvalido",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "remetente",
+        "type": "address"
+      }
+    ],
+    "name": "EntidadeNaoAutorizada",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "IndiceInvalido",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "avanco",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "limite",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "dias",
+        "type": "uint256"
+      }
+    ],
+    "name": "LeituraAtipica",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LeituraJaContestada",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "enviada",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "ultima",
+        "type": "uint256"
+      }
+    ],
+    "name": "QuilometragemRegressiva",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "VeiculoJaCadastrado",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "VeiculoNaoCadastrado",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "chassiHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "indice",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "kmContestada",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "kmCorreta",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "autoridade",
+        "type": "address"
+      }
+    ],
+    "name": "LeituraCorrigida",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "chassiHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "quilometragem",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum KmChainRegistry.TipoEvento",
+        "name": "tipo",
+        "type": "uint8"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "entidade",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "data",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "hashDocumento",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "atipica",
+        "type": "bool"
+      }
+    ],
+    "name": "LeituraRegistrada",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "chassiHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "limiteDiario",
+        "type": "uint32"
+      }
+    ],
+    "name": "LimiteAlterado",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "previousAdminRole",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "newAdminRole",
+        "type": "bytes32"
+      }
+    ],
+    "name": "RoleAdminChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "RoleGranted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "RoleRevoked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "chassiHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "placa",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "ano",
+        "type": "uint16"
+      }
+    ],
+    "name": "VeiculoCadastrado",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "DEFAULT_ADMIN_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "DETRAN_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "OFICINA_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "VISTORIA_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "chassi",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "placa",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "modelo",
+        "type": "string"
+      },
+      {
+        "internalType": "uint16",
+        "name": "ano",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "kmInicial",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "hashDocumento",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cadastrarVeiculo",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "chassi",
+        "type": "string"
+      }
+    ],
+    "name": "chaveDoChassi",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "chassi",
+        "type": "string"
+      }
+    ],
+    "name": "conformidade",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "conforme",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "ultimaKm",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint64",
+        "name": "ultimaData",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint32",
+        "name": "totalLeituras",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "totalCorrecoes",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "possuiAtipicas",
+        "type": "bool"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "ultimoHash",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "chassi",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "indice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "kmCorreta",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "hashJustificativa",
+        "type": "bytes32"
+      }
+    ],
+    "name": "corrigirLeitura",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "chassi",
+        "type": "string"
+      },
+      {
+        "internalType": "uint32",
+        "name": "limiteDiario",
+        "type": "uint32"
+      }
+    ],
+    "name": "definirLimiteDoVeiculo",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "limiteDiario",
+        "type": "uint32"
+      }
+    ],
+    "name": "definirLimitePadrao",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "chassi",
+        "type": "string"
+      }
+    ],
+    "name": "getHistorico",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "quilometragem",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint64",
+            "name": "data",
+            "type": "uint64"
+          },
+          {
+            "internalType": "address",
+            "name": "entidade",
+            "type": "address"
+          },
+          {
+            "internalType": "enum KmChainRegistry.TipoEvento",
+            "name": "tipo",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "hashDocumento",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bool",
+            "name": "atipica",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "contestada",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct KmChainRegistry.Leitura[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getRoleAdmin",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "chassi",
+        "type": "string"
+      }
+    ],
+    "name": "getVeiculo",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "cadastrado",
+            "type": "bool"
+          },
+          {
+            "internalType": "string",
+            "name": "placa",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "modelo",
+            "type": "string"
+          },
+          {
+            "internalType": "uint16",
+            "name": "ano",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "ultimaKm",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint64",
+            "name": "ultimaData",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "totalLeituras",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "totalCorrecoes",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "limiteDiario",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "ultimoHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct KmChainRegistry.Veiculo",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "grantRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "hasRole",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "limiteDiarioPadrao",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "chassi",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "quilometragem",
+        "type": "uint256"
+      },
+      {
+        "internalType": "enum KmChainRegistry.TipoEvento",
+        "name": "tipo",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "hashDocumento",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "confirmarAtipica",
+        "type": "bool"
+      }
+    ],
+    "name": "registrarLeitura",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "callerConfirmation",
+        "type": "address"
+      }
+    ],
+    "name": "renounceRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "revokeRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes4",
+        "name": "interfaceId",
+        "type": "bytes4"
+      }
+    ],
+    "name": "supportsInterface",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
