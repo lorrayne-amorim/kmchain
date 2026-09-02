@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { contratoLeitura } from "../lib/blockchain";
-import { abrirDocumento } from "../lib/documentos";
 import EtiquetaQr from "./EtiquetaQr";
+import LeitorQr from "./LeitorQr";
 
 const TIPOS = ["Cadastro", "Vistoria", "Revisão", "Transferência", "Sinistro", "Correção"];
 
@@ -10,6 +10,7 @@ export default function ConsultaPublica() {
     const [resultado, setResultado] = useState(null);
     const [erro, setErro] = useState("");
     const [carregando, setCarregando] = useState(false);
+    const [lendoQr, setLendoQr] = useState(false);
 
     // Permite abrir a consulta direto pelo QR Code: /?chassi=XXXX
     useEffect(() => {
@@ -19,6 +20,12 @@ export default function ConsultaPublica() {
             consultar(daUrl);
         }
     }, []);
+
+    async function lido(chassiLido) {
+        setLendoQr(false);
+        setChassi(chassiLido.toUpperCase());
+        await consultar(chassiLido);
+    }
 
     async function consultar(valor) {
         const alvo = String(valor ?? chassi).trim().toUpperCase();
@@ -51,7 +58,7 @@ export default function ConsultaPublica() {
     return (
         <section>
             <h2>Consultar histórico</h2>
-            <p>Digite o chassi que consta no documento do veículo.</p>
+            <p>Digite o chassi que consta no documento do veículo, ou leia o QR Code da etiqueta.</p>
 
             <input
                 value={chassi}
@@ -62,6 +69,11 @@ export default function ConsultaPublica() {
             <button onClick={() => consultar()} disabled={carregando}>
                 {carregando ? "Consultando..." : "Consultar"}
             </button>
+            <button onClick={() => setLendoQr((v) => !v)}>
+                {lendoQr ? "Cancelar leitura" : "Ler QR Code"}
+            </button>
+
+            {lendoQr && <LeitorQr aoLer={lido} />}
 
             {erro && <p className="erro">{erro}</p>}
 
@@ -90,45 +102,25 @@ export default function ConsultaPublica() {
                                 <th>Quilometragem</th>
                                 <th>Evento</th>
                                 <th>Entidade</th>
-                                <th>Documento</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {resultado.historico.map((leitura, i) => {
-                                const temDoc = !/^0x0+$/.test(leitura.hashDocumento);
-                                return (
-                                    <tr key={i} className={leitura.contestada ? "contestada" : ""}>
-                                        <td>
-                                            {new Date(Number(leitura.data) * 1000).toLocaleDateString("pt-BR")}
-                                        </td>
-                                        <td>
-                                            {Number(leitura.quilometragem).toLocaleString("pt-BR")} km
-                                            {leitura.atipica && <span className="marca">atípica</span>}
-                                            {leitura.contestada && <span className="marca">corrigida</span>}
-                                        </td>
-                                        <td>{TIPOS[Number(leitura.tipo)]}</td>
-                                        <td title={leitura.entidade}>
-                                            {leitura.entidade.slice(0, 6)}...{leitura.entidade.slice(-4)}
-                                        </td>
-                                        <td>
-                                            {temDoc ? (
-                                                // O hash e publico; o documento so abre para carteira credenciada.
-                                                <button
-                                                    className="ancorado"
-                                                    title={leitura.hashDocumento}
-                                                    onClick={() =>
-                                                        abrirDocumento(leitura.hashDocumento).catch((e) => alert(e.message))
-                                                    }
-                                                >
-                                                    comprovante ancorado
-                                                </button>
-                                            ) : (
-                                                "—"
-                                            )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                            {resultado.historico.map((leitura, i) => (
+                                <tr key={i} className={leitura.contestada ? "contestada" : ""}>
+                                    <td>
+                                        {new Date(Number(leitura.data) * 1000).toLocaleDateString("pt-BR")}
+                                    </td>
+                                    <td>
+                                        {Number(leitura.quilometragem).toLocaleString("pt-BR")} km
+                                        {leitura.atipica && <span className="marca">atípica</span>}
+                                        {leitura.contestada && <span className="marca">corrigida</span>}
+                                    </td>
+                                    <td>{TIPOS[Number(leitura.tipo)]}</td>
+                                    <td title={leitura.entidade}>
+                                        {leitura.entidade.slice(0, 6)}...{leitura.entidade.slice(-4)}
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
 

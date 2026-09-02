@@ -132,7 +132,12 @@ export default function RegistroLeitura() {
                                 : `+ ${revisao.avanco.toLocaleString("pt-BR")} km`}
                         </dd>
                         <dt>Evento</dt><dd>{TIPOS[tipo]}</dd>
-                        <dt>Documento</dt><dd>{arquivo ? arquivo.name : "nenhum anexado"}</dd>
+                        <dt>Documento</dt>
+                        <dd>
+                            <input type="file" accept="application/pdf,image/*"
+                                onChange={(e) => { setArquivo(e.target.files[0]); setHashDoc(null); }} />
+                            <span className="nome-arquivo">{arquivo ? arquivo.name : "nenhum anexado"}</span>
+                        </dd>
                     </dl>
 
                     {revisao.regressiva && (

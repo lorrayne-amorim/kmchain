@@ -39,7 +39,9 @@ export default async function handler(req, res) {
         const arquivo = data?.files?.[0];
         if (!arquivo) return res.status(404).json({ erro: "Documento não localizado." });
 
-        res.status(200).json({ url: `${process.env.GATEWAY}/ipfs/${arquivo.cid}` });
+        // Aceita o GATEWAY salvo com ou sem esquema/barra final.
+        const gateway = process.env.GATEWAY.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+        res.status(200).json({ url: `https://${gateway}/ipfs/${arquivo.cid}` });
     } catch (erro) {
         res.status(500).json({ erro: erro.message });
     }
