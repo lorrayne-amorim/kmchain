@@ -59,7 +59,7 @@ export default function App() {
     return (
       <main>
         <header>
-          <div className="marca">
+          <div>
             <img className="logo" src="/logo.png" alt="" />
             <h1>Km<span className="acento">Chain</span></h1>
           </div>
