@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { contratoLeitura, contratoEscrita, linkTransacao } from "../lib/blockchain";
 import { enviarDocumento } from "../lib/documentos";
+import { registrarPrivado } from "../lib/privado";
 
 const TIPOS = ["Cadastro", "Vistoria", "Revisão", "Transferência", "Sinistro", "Correção"];
 const ZERO = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
-export default function RegistroLeitura() {
+export default function RegistroLeitura({ usuario, conta }) {
     const [chassi, setChassi] = useState("");
     const [km, setKm] = useState("");
     const [tipo, setTipo] = useState(1);
     const [arquivo, setArquivo] = useState(null);
+    const [nomeNovoProprietario, setNomeNovoProprietario] = useState("");
+    const [cpfNovoProprietario, setCpfNovoProprietario] = useState("");
 
     const [etapa, setEtapa] = useState("formulario"); // formulario | revisao | atipica | enviando
     const [revisao, setRevisao] = useState(null);
@@ -35,6 +38,12 @@ export default function RegistroLeitura() {
         const alvo = chassi.trim().toUpperCase();
         if (alvo.length !== 17) return setStatus("O chassi precisa ter 17 caracteres.");
         if (!/^[0-9]+$/.test(km)) return setStatus("Informe a quilometragem em números inteiros.");
+        if (Number(tipo) === 3) {
+            if (!nomeNovoProprietario.trim()) return setStatus("Informe o nome do novo proprietário.");
+            if (cpfNovoProprietario.replace(/\D/g, "").length !== 11) {
+                return setStatus("Informe um CPF válido (11 dígitos) do novo proprietário.");
+            }
+        }
 
         try {
             const veiculo = await contratoLeitura().getVeiculo(alvo);
@@ -76,11 +85,29 @@ export default function RegistroLeitura() {
             setStatus("Aguardando a confirmação do bloco...");
             const r = await tx.wait();
             setRecibo({ hash: tx.hash, gas: r.gasUsed.toString() });
-            setStatus(confirmarAtipica ? "Leitura registrada e marcada como atípica." : "Leitura registrada.");
+
+            // Registro privado: quem de fato assinou (nome, nao so carteira) e,
+            // numa transferencia, os dados do novo proprietario - nunca em cadeia.
+            let avisoPrivado = "";
+            try {
+                await registrarPrivado({
+                    chassi, tipoEvento: TIPOS[tipo], carteira: conta, txHash: tx.hash,
+                    ...(Number(tipo) === 3 && {
+                        nomeProprietario: nomeNovoProprietario,
+                        cpfProprietario: cpfNovoProprietario
+                    })
+                });
+            } catch {
+                avisoPrivado = " (o registro privado não pôde ser salvo; tente novamente pela aba de registros)";
+            }
+
+            setStatus((confirmarAtipica ? "Leitura registrada e marcada como atípica." : "Leitura registrada.") + avisoPrivado);
             setEtapa("formulario");
             setRevisao(null);
             setAtipica(null);
             setHashDoc(null);
+            setNomeNovoProprietario("");
+            setCpfNovoProprietario("");
         } catch (e) {
             // SEGUNDA CONFIRMACAO - so aparece quando o proprio contrato recusa o
             // avanco por estar acima do limite. Os numeros vem do erro do contrato,
@@ -111,6 +138,17 @@ export default function RegistroLeitura() {
                     <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
                         {TIPOS.map((t, i) => i > 0 && i < 5 && <option key={i} value={i}>{t}</option>)}
                     </select>
+                    {Number(tipo) === 3 && (
+                        <>
+                            <input placeholder="Nome do novo proprietário" value={nomeNovoProprietario}
+                                onChange={(e) => setNomeNovoProprietario(e.target.value)} />
+                            <input placeholder="CPF do novo proprietário" value={cpfNovoProprietario}
+                                onChange={(e) => setCpfNovoProprietario(e.target.value)} />
+                            <p className="aviso campo">
+                                Nome e CPF ficam só no banco privado do DETRAN — nunca vão para a blockchain.
+                            </p>
+                        </>
+                    )}
                     <input type="file" accept="application/pdf,image/*"
                         onChange={(e) => { setArquivo(e.target.files[0]); setHashDoc(null); }} />
                     <button onClick={revisar}>Revisar registro</button>
@@ -132,6 +170,13 @@ export default function RegistroLeitura() {
                                 : `+ ${revisao.avanco.toLocaleString("pt-BR")} km`}
                         </dd>
                         <dt>Evento</dt><dd>{TIPOS[tipo]}</dd>
+                        {Number(tipo) === 3 && (
+                            <>
+                                <dt>Novo proprietário</dt><dd>{nomeNovoProprietario}</dd>
+                                <dt>CPF</dt><dd>{cpfNovoProprietario}</dd>
+                            </>
+                        )}
+                        <dt>Registrado por</dt><dd>{usuario?.nome}</dd>
                         <dt>Documento</dt>
                         <dd>
                             <input type="file" accept="application/pdf,image/*"

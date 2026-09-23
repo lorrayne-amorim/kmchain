@@ -29,13 +29,20 @@ Não precisa de carteira, MetaMask ou cadastro.
 
 ### DETRAN, vistorias e oficinas (painel profissional)
 
-Clique em "Acesso para DETRAN, vistoria e oficinas credenciadas" no rodapé da home e conecte a carteira MetaMask cadastrada na rede Sepolia. O que aparece depende do papel daquela carteira, conferido em tempo real no próprio contrato:
+Clique em "Acesso para DETRAN, vistoria e oficinas credenciadas" no rodapé da home. O acesso tem duas camadas, nessa ordem:
+
+1. **Login e senha** (conta própria, guardada com hash em banco SQL). Quem ainda não tem conta pode criar uma na hora, informando qual entidade pretende representar.
+2. **Carteira MetaMask credenciada na rede Sepolia.** Criar a conta de login não dá nenhum acesso por si só — é o DETRAN quem credencia a carteira em cadeia, exatamente como antes. Depois de logar, é possível vincular a carteira à conta (assinando uma mensagem) para o DETRAN localizá-la mais rápido na lista de contas pendentes.
+
+O que aparece no painel depende do papel da carteira conectada, conferido em tempo real no próprio contrato:
 
 | Papel | Pode fazer |
 |---|---|
 | Oficina / Vistoria | Registrar leitura (com documento comprobatório opcional) |
-| DETRAN | Tudo acima, além de cadastrar veículo, corrigir leitura equivocada e definir limites de avanço diário |
-| Admin (dono do contrato) | Credenciar ou revogar o acesso de outras carteiras |
+| DETRAN | Tudo acima, além de cadastrar veículo, corrigir leitura equivocada, definir limites de avanço diário e consultar os registros privados |
+| Admin (dono do contrato) | Credenciar ou revogar o acesso de outras carteiras, e ver as contas de login aguardando credenciamento |
+
+Cadastro de veículo e transferência de propriedade também pedem o nome e o CPF do proprietário atual. Esses dados **não vão para a blockchain** — ficam só no banco SQL, junto do nome de quem de fato realizou o serviço (não só a carteira que assinou), e só o DETRAN consegue consultá-los.
 
 Toda leitura com avanço de quilometragem muito acima do plausível para o período exige uma segunda confirmação explícita antes de ser gravada — e fica marcada como atípica no histórico público, em vez de ser bloqueada (o que impediria uso legítimo intenso, como frotas).
 
@@ -43,7 +50,8 @@ Toda leitura com avanço de quilometragem muito acima do plausível para o perí
 
 - **Contrato** (`contratos/`): um único `KmChainRegistry.sol`, escrito em Solidity, guarda os veículos e o histórico de leituras indexados pelo hash do chassi. Papéis (DETRAN, vistoria, oficina) são geridos via `AccessControl` da OpenZeppelin.
 - **Documentos**: o arquivo comprobatório (nota fiscal, laudo de vistoria) nunca vai para a blockchain. Só o SHA-256 dele é gravado em cadeia; o arquivo em si fica no IPFS via Pinata, e só é liberado a uma carteira que prove (assinando uma mensagem) ter um papel credenciado.
-- **Frontend** (`web/`): React + Vite, conversando com o contrato via `ethers.js`. Funciona de graça para consulta (RPC público) e exige MetaMask só para quem for gravar algo.
+- **Login e dados privados** (`web/api/auth/`, `web/api/privado/`): banco SQL (Postgres) guarda a conta de login de cada entidade (senha com hash bcrypt, sessão em cookie HttpOnly assinado por HMAC) e os dados que a blockchain nunca deveria expor — CPF e nome do proprietário atual, e o nome de quem, de fato, realizou cada serviço (não só a carteira). A leitura desses dados exige, além do login, a mesma prova por assinatura usada nos documentos: só quem tem `DETRAN_ROLE` em cadeia consulta.
+- **Frontend** (`web/`): React + Vite, conversando com o contrato via `ethers.js`. Funciona de graça para consulta (RPC público) e exige login + MetaMask só para quem for gravar algo.
 
 ## Rodando localmente
 
@@ -59,8 +67,8 @@ npm install
 npm run dev
 ```
 
-O frontend precisa de um `.env` (endereço da rede, RPC público) e um `.env.local` (chave da Pinata, RPC do backend) — veja `web/.env` e `web/.env.local` para as variáveis esperadas.
+O frontend precisa de um `.env` (endereço da rede, RPC público) e um `.env.local` (chave da Pinata, RPC do backend, `DATABASE_URL` do Postgres e `SESSION_SECRET` do login) — veja `web/.env` e `web/.env.local` para as variáveis esperadas. As tabelas do banco são criadas sozinhas (`CREATE TABLE IF NOT EXISTS`) na primeira chamada às rotas de login.
 
 ## Stack
 
-Solidity · Hardhat · OpenZeppelin AccessControl · React · Vite · ethers.js · IPFS/Pinata · Vercel
+Solidity · Hardhat · OpenZeppelin AccessControl · React · Vite · ethers.js · IPFS/Pinata · Postgres · bcrypt · Vercel

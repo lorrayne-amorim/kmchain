@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { contratoLeitura, contratoEscrita, linkTransacao } from "../lib/blockchain";
 import { enviarDocumento } from "../lib/documentos";
+import { registrarPrivado } from "../lib/privado";
 
 const ZERO = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 // Exclusivo do DETRAN. Cria o veiculo em cadeia com sua primeira leitura
 // (o proprio cadastro conta como o evento inicial do historico).
-export default function CadastroVeiculo() {
+export default function CadastroVeiculo({ usuario, conta }) {
     const [chassi, setChassi] = useState("");
     const [placa, setPlaca] = useState("");
     const [modelo, setModelo] = useState("");
     const [ano, setAno] = useState("");
     const [kmInicial, setKmInicial] = useState("");
     const [arquivo, setArquivo] = useState(null);
+    const [cpfProprietario, setCpfProprietario] = useState("");
+    const [nomeProprietario, setNomeProprietario] = useState("");
 
     const [etapa, setEtapa] = useState("formulario"); // formulario | revisao | enviando
     const [status, setStatus] = useState("");
@@ -33,6 +36,8 @@ export default function CadastroVeiculo() {
         if (!modelo.trim()) return setStatus("Informe o modelo.");
         if (!/^[0-9]{4}$/.test(ano)) return setStatus("Informe o ano com 4 dígitos.");
         if (!/^[0-9]+$/.test(kmInicial)) return setStatus("Informe a quilometragem em números inteiros.");
+        if (!nomeProprietario.trim()) return setStatus("Informe o nome do proprietário atual.");
+        if (cpfProprietario.replace(/\D/g, "").length !== 11) return setStatus("Informe um CPF válido (11 dígitos).");
 
         try {
             const veiculo = await contratoLeitura().getVeiculo(alvo);
@@ -66,7 +71,21 @@ export default function CadastroVeiculo() {
             setStatus("Aguardando a confirmação do bloco...");
             const r = await tx.wait();
             setRecibo({ hash: tx.hash, gas: r.gasUsed.toString() });
-            setStatus("Veículo cadastrado.");
+
+            // CPF/nome do proprietario nunca vao para a blockchain - ficam so
+            // no banco privado, associados a quem de fato fez o cadastro.
+            let avisoPrivado = "";
+            try {
+                await registrarPrivado({
+                    chassi, placa, modelo, ano,
+                    cpfProprietario, nomeProprietario,
+                    tipoEvento: "Cadastro", carteira: conta, txHash: tx.hash
+                });
+            } catch {
+                avisoPrivado = " (o registro privado do proprietário não pôde ser salvo; tente novamente pela aba de registros)";
+            }
+
+            setStatus("Veículo cadastrado." + avisoPrivado);
             setEtapa("formulario");
             setChassi("");
             setPlaca("");
@@ -74,6 +93,8 @@ export default function CadastroVeiculo() {
             setAno("");
             setKmInicial("");
             setArquivo(null);
+            setCpfProprietario("");
+            setNomeProprietario("");
         } catch (e) {
             if (e.revert?.name === "VeiculoJaCadastrado") {
                 setStatus("Este chassi já está cadastrado.");
@@ -101,6 +122,13 @@ export default function CadastroVeiculo() {
                         onChange={(e) => setAno(e.target.value)} />
                     <input placeholder="Quilometragem inicial" type="number" value={kmInicial}
                         onChange={(e) => setKmInicial(e.target.value)} />
+                    <input placeholder="Nome do proprietário atual" value={nomeProprietario}
+                        onChange={(e) => setNomeProprietario(e.target.value)} />
+                    <input placeholder="CPF do proprietário atual" value={cpfProprietario}
+                        onChange={(e) => setCpfProprietario(e.target.value)} />
+                    <p className="aviso campo">
+                        Nome e CPF ficam só no banco privado do DETRAN — nunca vão para a blockchain.
+                    </p>
                     <input type="file" accept="application/pdf,image/*"
                         onChange={(e) => setArquivo(e.target.files[0])} />
                     <button onClick={revisar}>Revisar cadastro</button>
@@ -117,6 +145,9 @@ export default function CadastroVeiculo() {
                         <dt>Ano</dt><dd>{ano}</dd>
                         <dt>Quilometragem inicial</dt>
                         <dd>{Number(kmInicial).toLocaleString("pt-BR")} km</dd>
+                        <dt>Proprietário</dt><dd>{nomeProprietario}</dd>
+                        <dt>CPF</dt><dd>{cpfProprietario}</dd>
+                        <dt>Registrado por</dt><dd>{usuario?.nome}</dd>
                         <dt>Documento</dt>
                         <dd>
                             <input type="file" accept="application/pdf,image/*"

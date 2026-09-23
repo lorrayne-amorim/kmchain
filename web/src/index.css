@@ -538,6 +538,110 @@ button.ancorado:hover {
   transform: none;
 }
 
+/* --------------------------------------------------------- ficha do veiculo */
+
+.ficha-veiculo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, var(--blue-50), var(--surface));
+  border: 1px solid var(--blue-100);
+  border-radius: 16px;
+  padding: 20px 22px;
+  margin-top: 4px;
+}
+
+.ficha-icone {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  background: var(--blue-100);
+  border-radius: 14px;
+}
+
+.ficha-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ficha-info h3 {
+  margin: 0 0 6px;
+  font-size: 19px;
+  overflow-wrap: anywhere;
+}
+
+.ficha-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--blue-700);
+  background: var(--surface);
+  border: 1px solid var(--blue-100);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.badge-placa {
+  font-family: var(--mono);
+  letter-spacing: 0.5px;
+}
+
+.ficha-km {
+  flex: none;
+  text-align: right;
+}
+
+.km-valor {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-h);
+  line-height: 1.1;
+}
+
+.km-rotulo {
+  display: block;
+  font-size: 11.5px;
+  color: var(--slate-400);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 2px;
+}
+
+/* ------------------------------------------------------------- autenticacao */
+
+.autenticacao form {
+  max-width: 360px;
+}
+
+.troca-modo {
+  margin-top: 16px;
+  font-size: 13.5px;
+  color: var(--slate-600);
+}
+
+h3.separador {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.aviso.campo {
+  margin: -4px 0 12px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+}
+
 /* -------------------------------------------------------------- etiqueta */
 
 .etiqueta {
@@ -612,6 +716,15 @@ button.ancorado:hover {
   .revisao dl {
     grid-template-columns: 1fr;
     gap: 2px 0;
+  }
+
+  .ficha-veiculo {
+    flex-wrap: wrap;
+  }
+
+  .ficha-km {
+    text-align: left;
+    flex: 1 0 100%;
   }
 
   .revisao dt {

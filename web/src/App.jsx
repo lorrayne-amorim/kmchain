@@ -4,19 +4,30 @@ import RegistroLeitura from "./componentes/RegistroLeitura";
 import CadastroVeiculo from "./componentes/CadastroVeiculo";
 import CorrigirLeitura from "./componentes/CorrigirLeitura";
 import CredenciarEntidade from "./componentes/CredenciarEntidade";
+import ConsultaPrivada from "./componentes/ConsultaPrivada";
+import Autenticacao from "./componentes/Autenticacao";
 import { conectarCarteira, contaConectada, papeisDaConta } from "./lib/blockchain";
+import { usuarioLogado, sair, vincularCarteira } from "./lib/auth";
 
 const SEM_PAPEIS = { admin: false, detran: false, vistoria: false, oficina: false };
+const ROTULO_PAPEL = { oficina: "Oficina", vistoria: "Centro de vistoria", detran: "DETRAN" };
 
 export default function App() {
   // "publico" e a home de qualquer pessoa: so a consulta, sem carteira.
-  // "profissional" e o painel do DETRAN/vistoria/oficina, atras da carteira.
+  // "profissional" e o painel do DETRAN/vistoria/oficina, atras de duas
+  // camadas: login/senha (conta no banco) e, so depois, a carteira
+  // credenciada em cadeia pelo DETRAN.
   const [modo, setModo] = useState("publico");
   const [aba, setAba] = useState("registro");
   const [conta, setConta] = useState(null);
   const [papeis, setPapeis] = useState(SEM_PAPEIS);
   const [conectando, setConectando] = useState(false);
   const [erro, setErro] = useState("");
+
+  const [usuario, setUsuario] = useState(null);
+  const [carregandoSessao, setCarregandoSessao] = useState(true);
+  const [vinculando, setVinculando] = useState(false);
+  const [avisoVinculo, setAvisoVinculo] = useState("");
 
   async function atualizar(endereco) {
     setConta(endereco);
@@ -33,12 +44,21 @@ export default function App() {
     return () => window.ethereum.removeListener("accountsChanged", aoTrocarConta);
   }, []);
 
+  // Sessao de login (segunda camada): busca quem esta logado ao abrir o site.
+  useEffect(() => {
+    usuarioLogado()
+      .then(setUsuario)
+      .catch(() => setUsuario(null))
+      .finally(() => setCarregandoSessao(false));
+  }, []);
+
   const credenciada = papeis.detran || papeis.vistoria || papeis.oficina;
 
   // Se a conta perder o papel que dava acesso a aba aberta (ex.: trocou de
   // carteira), volta para uma aba que ela ainda pode ver em vez de travar a tela.
   useEffect(() => {
     if ((aba === "cadastro" || aba === "correcao") && !papeis.detran) setAba("registro");
+    if (aba === "privado" && !papeis.detran) setAba("registro");
     if (aba === "credenciar" && !papeis.admin) setAba("registro");
     if (aba === "registro" && !credenciada && papeis.admin) setAba("credenciar");
   }, [aba, papeis, credenciada]);
@@ -52,6 +72,25 @@ export default function App() {
       setErro(e.message);
     } finally {
       setConectando(false);
+    }
+  }
+
+  async function sairDaConta() {
+    await sair();
+    setUsuario(null);
+  }
+
+  async function vincular() {
+    setAvisoVinculo("");
+    setVinculando(true);
+    try {
+      await vincularCarteira(conta, usuario.email);
+      setUsuario((u) => ({ ...u, carteira: conta }));
+      setAvisoVinculo("Carteira vinculada à sua conta.");
+    } catch (e) {
+      setAvisoVinculo(e.message);
+    } finally {
+      setVinculando(false);
     }
   }
 
@@ -89,36 +128,72 @@ export default function App() {
         </div>
         <p className="etiqueta-modo">Painel profissional</p>
 
-        {conta ? (
+        {usuario && (
           <p className="carteira">
-            Conectado: {conta.slice(0, 6)}...{conta.slice(-4)}
-            {papeis.detran && <span className="papel">DETRAN</span>}
-            {papeis.vistoria && <span className="papel">Vistoria</span>}
-            {papeis.oficina && <span className="papel">Oficina</span>}
+            {usuario.nome} · {usuario.email}
+            {" "}
+            <button className="link" onClick={sairDaConta}>sair</button>
           </p>
-        ) : (
-          <button onClick={conectar} disabled={conectando}>
-            {conectando ? "Conectando..." : "Conectar carteira"}
-          </button>
+        )}
+
+        {usuario && (
+          conta ? (
+            <p className="carteira">
+              Conectado: {conta.slice(0, 6)}...{conta.slice(-4)}
+              {papeis.detran && <span className="papel">DETRAN</span>}
+              {papeis.vistoria && <span className="papel">Vistoria</span>}
+              {papeis.oficina && <span className="papel">Oficina</span>}
+            </p>
+          ) : (
+            <button onClick={conectar} disabled={conectando}>
+              {conectando ? "Conectando..." : "Conectar carteira"}
+            </button>
+          )
         )}
         {erro && <p className="erro">{erro}</p>}
       </header>
 
-      {!conta && (
+      {carregandoSessao && <p className="aviso central">Carregando...</p>}
+
+      {!carregandoSessao && !usuario && (
+        <Autenticacao aoAutenticar={setUsuario} />
+      )}
+
+      {!carregandoSessao && usuario && !conta && (
         <p className="aviso central">
-          Conecte a carteira credenciada pelo DETRAN, por uma vistoria ou por uma
-          oficina para acessar o painel.
+          Login confirmado. Agora conecte a carteira credenciada pelo DETRAN, por uma
+          vistoria ou por uma oficina para acessar o painel — ou vincule a carteira que
+          o DETRAN ainda vai credenciar, para agilizar o processo (função pretendida:{" "}
+          {ROTULO_PAPEL[usuario.papel_solicitado] ?? usuario.papel_solicitado}).
         </p>
       )}
 
-      {conta && !credenciada && !papeis.admin && (
-        <p className="erro central">
-          Esta carteira não tem nenhum papel credenciado no KmChain.
-        </p>
+      {usuario && conta && !credenciada && !papeis.admin && (
+        <div className="aviso central">
+          <p>Esta carteira ainda não tem nenhum papel credenciado no KmChain.</p>
+          {usuario.carteira !== conta && (
+            <p>
+              <button className="secundario" onClick={vincular} disabled={vinculando}>
+                {vinculando ? "Vinculando..." : "Vincular esta carteira à minha conta"}
+              </button>
+            </p>
+          )}
+          {avisoVinculo && <p>{avisoVinculo}</p>}
+        </div>
       )}
 
-      {conta && (credenciada || papeis.admin) && (
+      {usuario && conta && (credenciada || papeis.admin) && (
         <>
+          {usuario.carteira !== conta && (
+            <p className="aviso central">
+              {vinculando
+                ? "Vinculando carteira..."
+                : <>Esta carteira ainda não está vinculada à sua conta.{" "}
+                    <button className="link" onClick={vincular}>Vincular agora</button></>}
+              {avisoVinculo && <> — {avisoVinculo}</>}
+            </p>
+          )}
+
           <nav>
             {credenciada && (
               <button aria-current={aba === "registro"} onClick={() => setAba("registro")}>
@@ -135,6 +210,11 @@ export default function App() {
                 Corrigir leitura
               </button>
             )}
+            {papeis.detran && (
+              <button aria-current={aba === "privado"} onClick={() => setAba("privado")}>
+                Registros privados
+              </button>
+            )}
             {papeis.admin && (
               <button aria-current={aba === "credenciar"} onClick={() => setAba("credenciar")}>
                 Credenciar entidade
@@ -142,9 +222,10 @@ export default function App() {
             )}
           </nav>
 
-          {aba === "registro" && credenciada && <RegistroLeitura />}
-          {aba === "cadastro" && papeis.detran && <CadastroVeiculo />}
+          {aba === "registro" && credenciada && <RegistroLeitura usuario={usuario} conta={conta} />}
+          {aba === "cadastro" && papeis.detran && <CadastroVeiculo usuario={usuario} conta={conta} />}
           {aba === "correcao" && papeis.detran && <CorrigirLeitura />}
+          {aba === "privado" && papeis.detran && <ConsultaPrivada />}
           {aba === "credenciar" && papeis.admin && <CredenciarEntidade />}
         </>
       )}

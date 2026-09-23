@@ -79,18 +79,30 @@ export default function ConsultaPublica() {
 
             {resultado && (
                 <div>
-                    <h3>
-                        {resultado.veiculo.modelo} · {resultado.veiculo.ano} ·{" "}
-                        {resultado.veiculo.placa}
-                    </h3>
+                    <div className="ficha-veiculo">
+                        <div className="ficha-icone" aria-hidden="true">🚗</div>
+                        <div className="ficha-info">
+                            <h3>{resultado.veiculo.modelo}</h3>
+                            <div className="ficha-badges">
+                                <span className="badge">{resultado.veiculo.ano}</span>
+                                <span className="badge badge-placa">{resultado.veiculo.placa}</span>
+                            </div>
+                        </div>
+                        <div className="ficha-km">
+                            <span className="km-valor">
+                                {Number(resultado.veiculo.ultimaKm).toLocaleString("pt-BR")}
+                            </span>
+                            <span className="km-rotulo">km atuais</span>
+                        </div>
+                    </div>
+
                     <p className={resultado.conforme ? "selo ok" : "selo alerta"}>
                         {resultado.conforme
                             ? "Histórico íntegro e documentado"
                             : "Histórico íntegro, com leituras sem comprovante anexado"}
                     </p>
                     <p>
-                        Última leitura: {resultado.veiculo.ultimaKm.toString()} km ·{" "}
-                        {resultado.veiculo.totalLeituras.toString()} registros
+                        {resultado.veiculo.totalLeituras.toString()} registro(s) no histórico
                         {Number(resultado.veiculo.totalCorrecoes) > 0 &&
                             ` · ${resultado.veiculo.totalCorrecoes} correção(ões) do DETRAN`}
                     </p>
