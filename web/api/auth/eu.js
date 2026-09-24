@@ -11,7 +11,7 @@ export default async function handler(req, res) {
 
     try {
         const r = await bd(
-            "SELECT id, nome, email, papel_solicitado, carteira FROM usuarios WHERE id = $1",
+            "SELECT id, nome, email, carteira FROM usuarios WHERE id = $1",
             [sessao.id]
         );
         res.status(200).json({ usuario: r.rows[0] ?? null });

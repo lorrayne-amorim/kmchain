@@ -31,7 +31,7 @@ Não precisa de carteira, MetaMask ou cadastro.
 
 Clique em "Acesso para DETRAN, vistoria e oficinas credenciadas" no rodapé da home. O acesso tem duas camadas, nessa ordem:
 
-1. **Login e senha** (conta própria, guardada com hash em banco SQL). Quem ainda não tem conta pode criar uma na hora, informando qual entidade pretende representar.
+1. **Login e senha** (conta própria, guardada com hash em banco SQL). Quem ainda não tem conta pode criar uma na hora, só com nome, e-mail e senha — a função da entidade (oficina, vistoria ou DETRAN) é atribuída depois pelo DETRAN, ao credenciar a carteira vinculada à conta.
 2. **Carteira MetaMask credenciada na rede Sepolia.** Criar a conta de login não dá nenhum acesso por si só — é o DETRAN quem credencia a carteira em cadeia, exatamente como antes. Depois de logar, é possível vincular a carteira à conta (assinando uma mensagem) para o DETRAN localizá-la mais rápido na lista de contas pendentes.
 
 O que aparece no painel depende do papel da carteira conectada, conferido em tempo real no próprio contrato:

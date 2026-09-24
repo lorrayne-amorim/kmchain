@@ -10,7 +10,7 @@ export default async function handler(req, res) {
         const senha = String(req.body?.senha ?? "");
 
         const r = await bd(
-            "SELECT id, nome, email, senha_hash, papel_solicitado, carteira FROM usuarios WHERE email = $1",
+            "SELECT id, nome, email, senha_hash, carteira FROM usuarios WHERE email = $1",
             [email]
         );
         const linha = r.rows[0];

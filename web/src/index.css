@@ -80,7 +80,7 @@ header {
   background: radial-gradient(120% 140% at 50% -20%, var(--blue-100), var(--surface) 65%);
 }
 
-.marca {
+.identidade {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -88,7 +88,7 @@ header {
   margin-bottom: 6px;
 }
 
-.marca .logo {
+.identidade .logo {
   width: 48px;
   height: 48px;
   object-fit: cover;
@@ -703,7 +703,7 @@ h3.separador {
     padding: 24px 20px 32px;
   }
 
-  .marca .logo {
+  .identidade .logo {
     width: 38px;
     height: 38px;
     border-radius: 10px;

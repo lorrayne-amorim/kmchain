@@ -10,7 +10,6 @@ import { conectarCarteira, contaConectada, papeisDaConta } from "./lib/blockchai
 import { usuarioLogado, sair, vincularCarteira } from "./lib/auth";
 
 const SEM_PAPEIS = { admin: false, detran: false, vistoria: false, oficina: false };
-const ROTULO_PAPEL = { oficina: "Oficina", vistoria: "Centro de vistoria", detran: "DETRAN" };
 
 export default function App() {
   // "publico" e a home de qualquer pessoa: so a consulta, sem carteira.
@@ -98,7 +97,7 @@ export default function App() {
     return (
       <main>
         <header>
-          <div>
+          <div className="identidade">
             <img className="logo" src="/logo.png" alt="" />
             <h1>Km<span className="acento">Chain</span></h1>
           </div>
@@ -122,7 +121,7 @@ export default function App() {
         <button className="link voltar" onClick={() => setModo("publico")}>
           ← Consulta pública
         </button>
-        <div className="marca">
+        <div className="identidade">
           <img className="logo" src="/logo.png" alt="" />
           <h1>Km<span className="acento">Chain</span></h1>
         </div>
@@ -161,10 +160,9 @@ export default function App() {
 
       {!carregandoSessao && usuario && !conta && (
         <p className="aviso central">
-          Login confirmado. Agora conecte a carteira credenciada pelo DETRAN, por uma
-          vistoria ou por uma oficina para acessar o painel — ou vincule a carteira que
-          o DETRAN ainda vai credenciar, para agilizar o processo (função pretendida:{" "}
-          {ROTULO_PAPEL[usuario.papel_solicitado] ?? usuario.papel_solicitado}).
+          Login confirmado. Agora conecte sua carteira: se ela ainda não foi credenciada,
+          vincule-a à sua conta para que o DETRAN possa atribuir a função da sua entidade
+          (oficina, centro de vistoria ou DETRAN).
         </p>
       )}
 

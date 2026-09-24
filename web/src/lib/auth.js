@@ -15,8 +15,8 @@ async function chamar(rota, corpo) {
     return dados;
 }
 
-export const criarConta = (nome, email, senha, papelSolicitado) =>
-    chamar("cadastrar", { nome, email, senha, papelSolicitado });
+export const criarConta = (nome, email, senha) =>
+    chamar("cadastrar", { nome, email, senha });
 
 export const entrar = (email, senha) => chamar("entrar", { email, senha });
 

@@ -37,10 +37,12 @@ function migrar() {
                 nome             TEXT NOT NULL,
                 email            TEXT NOT NULL UNIQUE,
                 senha_hash       TEXT NOT NULL,
-                papel_solicitado TEXT NOT NULL,
                 carteira         TEXT,
                 criado_em        TIMESTAMPTZ NOT NULL DEFAULT now()
             );
+            -- Versao antiga pedia a funcao no cadastro; hoje quem define e o
+            -- DETRAN, em cadeia, entao a coluna sai de bancos ja criados.
+            ALTER TABLE usuarios DROP COLUMN IF EXISTS papel_solicitado;
 
             CREATE TABLE IF NOT EXISTS registros_privados (
                 id                SERIAL PRIMARY KEY,

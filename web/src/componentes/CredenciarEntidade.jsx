@@ -8,8 +8,6 @@ const PAPEIS = [
     { valor: "DETRAN_ROLE", rotulo: "DETRAN" }
 ];
 
-const ROTULO_PAPEL_SOLICITADO = { oficina: "Oficina", vistoria: "Centro de vistoria", detran: "DETRAN" };
-
 // Exclusivo de quem tem DEFAULT_ADMIN_ROLE (o dono do contrato) - e nao de
 // qualquer conta DETRAN_ROLE, ja que o contrato nunca redefine o admin
 // desses papeis. Concede ou revoga acesso de outras carteiras.
@@ -100,7 +98,10 @@ export default function CredenciarEntidade() {
             )}
 
             <h3 className="separador">Contas cadastradas</h3>
-            <p>Login (e-mail/senha) de quem já pediu acesso, aguardando a carteira ser credenciada acima.</p>
+            <p>
+                Login (e-mail/senha) de quem já pediu acesso. Clique na carteira para preenchê-la
+                acima, escolha a função da entidade e conceda.
+            </p>
 
             {contas === null && (
                 <button className="secundario" onClick={carregarContas} disabled={carregandoContas}>
@@ -117,7 +118,6 @@ export default function CredenciarEntidade() {
                         <tr>
                             <th>Nome</th>
                             <th>E-mail</th>
-                            <th>Função pretendida</th>
                             <th>Carteira vinculada</th>
                         </tr>
                     </thead>
@@ -126,7 +126,6 @@ export default function CredenciarEntidade() {
                             <tr key={c.email}>
                                 <td>{c.nome}</td>
                                 <td>{c.email}</td>
-                                <td>{ROTULO_PAPEL_SOLICITADO[c.papel_solicitado] ?? c.papel_solicitado}</td>
                                 <td>
                                     {c.carteira
                                         ? <button className="ancorado" onClick={() => setCarteira(c.carteira)}>

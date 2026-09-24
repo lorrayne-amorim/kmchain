@@ -17,7 +17,7 @@ export default async function handler(req, res) {
         if (!quemAssinou) return res.status(403).json({ erro: "Carteira sem credencial para ver esta lista." });
 
         const r = await bd(
-            `SELECT nome, email, papel_solicitado, carteira, criado_em
+            `SELECT nome, email, carteira, criado_em
              FROM usuarios ORDER BY criado_em DESC LIMIT 200`
         );
         res.status(200).json({ contas: r.rows });
