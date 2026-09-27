@@ -5,7 +5,8 @@
 
 Site publicado ...... https://kmchain-web.vercel.app
 Repositorio ......... https://github.com/lorrayne-amorim/kmchain
-Contrato (Sepolia) .. 0xC33D1671A149Ed70257d9Ad7f3b8B7a4E75b9fE4
+Contrato (Sepolia) .. 0x8BcAB5232FFa571B802ac444E5Aba43f7333c49C
+                      (anterior, desativado: 0xC33D1671A149Ed70257d9Ad7f3b8B7a4E75b9fE4)
 
 
 -------------------------------------------------------------------------------
@@ -316,6 +317,9 @@ Veiculo de exemplo ja cadastrado na Sepolia:
 - Placa retirada da blockchain; fica so no banco privado.
 - Interface reorganizada: consulta publica unica (ConsultaVeiculo), painel
   com secoes por papel, biblioteca de componentes em web/src/ui.
+- Contrato sem placa publicado em 27/09/2026 (0x8BcA...c49C). Veiculos e
+  credenciais do contrato anterior nao migram; o veiculo de exemplo foi
+  recriado com o mesmo historico.
 - Correcao: web/api/_chain.js e web/api/documento.js passaram a importar os
   .json com "with { type: 'json' }". Antes disso o Node derrubava o servidor
   ao carregar essas rotas.
