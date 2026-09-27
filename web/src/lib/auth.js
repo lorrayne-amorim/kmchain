@@ -11,7 +11,9 @@ async function chamar(rota, corpo) {
         body: JSON.stringify(corpo)
     });
     const dados = await resposta.json().catch(() => ({}));
-    if (!resposta.ok) throw new Error(dados.erro ?? "Falha na operação.");
+    // Erros 5xx trazem a mensagem interna do servidor: nao vale mostrar.
+    if (resposta.status >= 500) throw new Error("Não foi possível concluir agora. Tente novamente em instantes.");
+    if (!resposta.ok) throw new Error(dados.erro ?? "Não foi possível concluir a operação.");
     return dados;
 }
 

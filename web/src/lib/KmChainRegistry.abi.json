@@ -290,7 +290,7 @@
       {
         "indexed": false,
         "internalType": "string",
-        "name": "placa",
+        "name": "modelo",
         "type": "string"
       },
       {
@@ -360,11 +360,6 @@
       {
         "internalType": "string",
         "name": "chassi",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "placa",
         "type": "string"
       },
       {
@@ -611,11 +606,6 @@
             "internalType": "bool",
             "name": "cadastrado",
             "type": "bool"
-          },
-          {
-            "internalType": "string",
-            "name": "placa",
-            "type": "string"
           },
           {
             "internalType": "string",

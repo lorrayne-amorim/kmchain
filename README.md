@@ -15,7 +15,7 @@ Odômetro se adultera. Uma vez gravada em cadeia, uma leitura não pode ser apag
 Não precisa de carteira, MetaMask ou cadastro.
 
 1. Acesse o [site](https://kmchain-web.vercel.app).
-2. Digite o chassi (17 caracteres) que consta no documento do veículo, **ou** clique em "Ler QR Code" e aponte a câmera para a etiqueta.
+2. Digite o chassi (17 caracteres) que consta no documento do veículo, **ou** clique em "Escanear QR Code" e aponte a câmera para a etiqueta.
 3. Veja o histórico completo: cada leitura, sua data, o tipo de evento (cadastro, vistoria, revisão, transferência, sinistro, correção) e a entidade que assinou. Um selo indica se o histórico está totalmente documentado.
 
 **Experimente agora** com um veículo já cadastrado na rede de testes:
@@ -42,15 +42,15 @@ O que aparece no painel depende do papel da carteira conectada, conferido em tem
 | DETRAN | Tudo acima, além de cadastrar veículo, corrigir leitura equivocada, definir limites de avanço diário e consultar os registros privados |
 | Admin (dono do contrato) | Credenciar ou revogar o acesso de outras carteiras, e ver as contas de login aguardando credenciamento |
 
-Cadastro de veículo e transferência de propriedade também pedem o nome e o CPF do proprietário atual. Esses dados **não vão para a blockchain** — ficam só no banco SQL, junto do nome de quem de fato realizou o serviço (não só a carteira que assinou), e só o DETRAN consegue consultá-los.
+Cadastro de veículo e transferência de propriedade também pedem o nome e o CPF do proprietário atual (e o cadastro, a placa). Esses dados **não vão para a blockchain** — ficam só no banco SQL, junto do nome de quem de fato realizou o serviço (não só a carteira que assinou), e só o DETRAN consegue consultá-los.
 
 Toda leitura com avanço de quilometragem muito acima do plausível para o período exige uma segunda confirmação explícita antes de ser gravada — e fica marcada como atípica no histórico público, em vez de ser bloqueada (o que impediria uso legítimo intenso, como frotas).
 
 ## Como funciona por baixo
 
 - **Contrato** (`contratos/`): um único `KmChainRegistry.sol`, escrito em Solidity, guarda os veículos e o histórico de leituras indexados pelo hash do chassi. Papéis (DETRAN, vistoria, oficina) são geridos via `AccessControl` da OpenZeppelin.
-- **Documentos**: o arquivo comprobatório (nota fiscal, laudo de vistoria) nunca vai para a blockchain. Só o SHA-256 dele é gravado em cadeia; o arquivo em si fica no IPFS via Pinata, e só é liberado a uma carteira que prove (assinando uma mensagem) ter um papel credenciado.
-- **Login e dados privados** (`web/api/auth/`, `web/api/privado/`): banco SQL (Postgres) guarda a conta de login de cada entidade (senha com hash bcrypt, sessão em cookie HttpOnly assinado por HMAC) e os dados que a blockchain nunca deveria expor — CPF e nome do proprietário atual, e o nome de quem, de fato, realizou cada serviço (não só a carteira). A leitura desses dados exige, além do login, a mesma prova por assinatura usada nos documentos: só quem tem `DETRAN_ROLE` em cadeia consulta.
+- **Documentos**: o arquivo comprobatório (nota fiscal, laudo de vistoria) nunca vai para a blockchain. Só o SHA-256 dele é gravado em cadeia; o arquivo em si fica no IPFS via Pinata, **cifrado com AES-256-GCM** pelo servidor antes do envio (nem o nome original do arquivo vai para lá). A chave (`DOCS_KEY`) existe só no servidor, que decifra o arquivo apenas para uma carteira que prove (assinando uma mensagem) ter um papel credenciado — e ainda confere se o arquivo decifrado tem exatamente o hash registrado em cadeia.
+- **Login e dados privados** (`web/api/auth/`, `web/api/privado/`): banco SQL (Postgres) guarda a conta de login de cada entidade (senha com hash bcrypt, sessão em cookie HttpOnly assinado por HMAC) e os dados que a blockchain nunca deveria expor — placa, CPF e nome do proprietário atual, e o nome de quem, de fato, realizou cada serviço (não só a carteira). A leitura desses dados exige, além do login, a mesma prova por assinatura usada nos documentos: só quem tem `DETRAN_ROLE` em cadeia consulta.
 - **Frontend** (`web/`): React + Vite, conversando com o contrato via `ethers.js`. Funciona de graça para consulta (RPC público) e exige login + MetaMask só para quem for gravar algo.
 
 ## Rodando localmente
@@ -67,7 +67,7 @@ npm install
 npm run dev
 ```
 
-O frontend precisa de um `.env` (endereço da rede, RPC público) e um `.env.local` (chave da Pinata, RPC do backend, `DATABASE_URL` do Postgres e `SESSION_SECRET` do login) — veja `web/.env` e `web/.env.local` para as variáveis esperadas. As tabelas do banco são criadas sozinhas (`CREATE TABLE IF NOT EXISTS`) na primeira chamada às rotas de login.
+O frontend precisa de um `.env` (endereço da rede, RPC público) e um `.env.local` (chave da Pinata, RPC do backend, `DATABASE_URL` do Postgres, `SESSION_SECRET` do login e `DOCS_KEY`, a chave AES-256 dos documentos) — veja `web/.env` e `web/.env.local` para as variáveis esperadas. As tabelas do banco são criadas sozinhas (`CREATE TABLE IF NOT EXISTS`) na primeira chamada às rotas de login.
 
 ## Stack
 

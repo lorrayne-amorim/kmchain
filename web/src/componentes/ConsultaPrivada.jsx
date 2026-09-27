@@ -1,81 +1,109 @@
 import { useState } from "react";
+import { mensagemDeErro } from "../lib/erros";
+import { formatarCpf, normalizarChassi, validarChassi } from "../lib/formato";
 import { consultarPrivado } from "../lib/privado";
+import Aviso from "../ui/Aviso";
+import Botao from "../ui/Botao";
+import Campo from "../ui/Campo";
+import { Vazio } from "../ui/Pagina";
+import Tabela from "../ui/Tabela";
+
+const dataHoraCurta = (valor) => new Date(valor).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
 // Exclusivo do DETRAN. O que aparece aqui NUNCA passa pela blockchain nem
-// pela consulta publica: CPF do proprietario no momento do servico e o nome
-// de quem, de fato, realizou cada cadastro/leitura (nao so a carteira).
+// pela consulta publica: placa, CPF do proprietario no momento do servico e
+// o nome de quem, de fato, realizou cada cadastro/leitura (nao so a carteira).
 export default function ConsultaPrivada() {
     const [chassi, setChassi] = useState("");
+    const [consultado, setConsultado] = useState("");
     const [registros, setRegistros] = useState(null);
+    const [erroCampo, setErroCampo] = useState("");
     const [erro, setErro] = useState("");
     const [carregando, setCarregando] = useState(false);
 
-    function formatarCpf(cpf) {
-        if (!cpf) return "—";
-        const d = cpf.replace(/\D/g, "").padStart(11, "0");
-        return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-    }
-
-    async function consultar() {
-        const alvo = chassi.trim().toUpperCase();
+    async function consultar(e) {
+        e.preventDefault();
         setErro("");
-        setRegistros(null);
-        if (alvo.length !== 17) return setErro("O chassi tem 17 caracteres.");
+        setErroCampo("");
+        const problema = validarChassi(chassi);
+        if (problema) return setErroCampo(problema);
 
         setCarregando(true);
+        setRegistros(null);
         try {
-            setRegistros(await consultarPrivado(alvo));
-        } catch (e) {
-            setErro(e.message);
+            setRegistros(await consultarPrivado(chassi));
+            setConsultado(chassi);
+        } catch (falha) {
+            setErro(mensagemDeErro(falha, "Não foi possível consultar os registros privados."));
         } finally {
             setCarregando(false);
         }
     }
 
     return (
-        <section>
-            <h2>Registros privados</h2>
-            <p>
-                Exclusivo do DETRAN. CPF do proprietário e o responsável real por cada
-                serviço — dados que nunca ficam na blockchain nem na consulta pública.
-            </p>
+        <div className="empilhado">
+            <form className="painel busca-linha" onSubmit={consultar} noValidate>
+                <Campo rotulo="Chassi do veículo" erro={erroCampo}
+                    ajuda={erroCampo ? undefined : "A consulta pede uma assinatura na carteira para confirmar a credencial DETRAN."}>
+                    <input className="mono" value={chassi} maxLength={17} placeholder="Digite o chassi"
+                        autoComplete="off" autoCapitalize="characters" spellCheck={false}
+                        onChange={(e) => setChassi(normalizarChassi(e.target.value))} />
+                </Campo>
+                <Botao type="submit" icone="busca" carregando={carregando}>Consultar</Botao>
+            </form>
 
-            <input value={chassi} maxLength={17} placeholder="Chassi"
-                onChange={(e) => setChassi(e.target.value.toUpperCase())} />
-            <button onClick={consultar} disabled={carregando}>
-                {carregando ? "Consultando..." : "Consultar"}
-            </button>
-
-            {erro && <p className="erro">{erro}</p>}
+            {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
             {registros && registros.length === 0 && (
-                <p className="aviso">Nenhum registro privado para este chassi ainda.</p>
+                <div className="painel">
+                    <Vazio titulo="Nenhum registro privado">
+                        Ainda não há dados privados para o chassi <span className="mono">{consultado}</span>.
+                    </Vazio>
+                </div>
             )}
 
             {registros && registros.length > 0 && (
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Data</th>
-                            <th>Evento</th>
-                            <th>Proprietário</th>
-                            <th>CPF</th>
-                            <th>Realizado por</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {registros.map((r, i) => (
-                            <tr key={i}>
-                                <td>{new Date(r.criado_em).toLocaleString("pt-BR")}</td>
-                                <td>{r.tipo_evento}</td>
-                                <td>{r.nome_proprietario ?? "—"}</td>
-                                <td>{formatarCpf(r.cpf_proprietario)}</td>
-                                <td title={r.usuario_email}>{r.usuario_nome}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                <div className="painel painel-tabela">
+                    <p className="painel-tabela-titulo">
+                        {registros.length} {registros.length === 1 ? "registro" : "registros"} · <span className="mono">{consultado}</span>
+                    </p>
+                    <Tabela
+                        rotulo="Registros privados do veículo"
+                        linhas={registros}
+                        chave={(r, i) => r.tx_hash ?? i}
+                        colunas={[
+                            { titulo: "Data", render: (r) => <span className="numero">{dataHoraCurta(r.criado_em)}</span> },
+                            { titulo: "Evento", render: (r) => r.tipo_evento },
+                            { titulo: "Placa", render: (r) => <span className="mono">{r.placa ?? "—"}</span> },
+                            { titulo: "Proprietário", render: (r) => r.nome_proprietario ?? "—" },
+                            { titulo: "CPF", render: (r) => <span className="numero">{formatarCpf(r.cpf_proprietario)}</span> },
+                            {
+                                titulo: "Realizado por",
+                                render: (r) => (
+                                    <>
+                                        {r.usuario_nome}
+                                        <span className="celula-secundaria">{r.usuario_email}</span>
+                                    </>
+                                )
+                            }
+                        ]}
+                        itemMovel={(r) => (
+                            <div className="item-movel">
+                                <div className="item-movel-topo">
+                                    <strong>{r.tipo_evento}</strong>
+                                    <span className="numero">{dataHoraCurta(r.criado_em)}</span>
+                                </div>
+                                <dl className="lista-dados lista-dados-compacta">
+                                    <div><dt>Placa</dt><dd className="mono">{r.placa ?? "—"}</dd></div>
+                                    <div><dt>Proprietário</dt><dd>{r.nome_proprietario ?? "—"}</dd></div>
+                                    <div><dt>CPF</dt><dd>{formatarCpf(r.cpf_proprietario)}</dd></div>
+                                    <div><dt>Realizado por</dt><dd>{r.usuario_nome}<span className="celula-secundaria">{r.usuario_email}</span></dd></div>
+                                </dl>
+                            </div>
+                        )}
+                    />
+                </div>
             )}
-        </section>
+        </div>
     );
 }

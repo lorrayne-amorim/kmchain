@@ -20,7 +20,6 @@ export async function enviarDocumento(arquivo, chassi) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            nomeArquivo: arquivo.name,
             tipo: arquivo.type,
             conteudoBase64,
             chassi,
@@ -33,7 +32,8 @@ export async function enviarDocumento(arquivo, chassi) {
 }
 
 // Abertura: quem pede assina uma mensagem com a carteira; o servidor confere
-// na propria blockchain se aquele endereco tem papel credenciado.
+// na propria blockchain se aquele endereco tem papel credenciado e devolve o
+// arquivo ja decifrado, que e aberto numa aba a partir da memoria do navegador.
 export async function abrirDocumento(hash) {
     if (!window.ethereum) throw new Error("Abrir o comprovante exige uma carteira credenciada.");
 
@@ -52,8 +52,12 @@ export async function abrirDocumento(hash) {
     });
 
     if (resposta.status === 403) throw new Error("Esta carteira não tem permissão para abrir o documento.");
-    if (!resposta.ok) throw new Error("Não foi possível abrir o documento.");
+    if (!resposta.ok) {
+        const { erro } = await resposta.json().catch(() => ({}));
+        throw new Error(erro ?? "Não foi possível abrir o documento.");
+    }
 
-    const { url } = await resposta.json();
+    const url = URL.createObjectURL(await resposta.blob());
     window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

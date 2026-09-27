@@ -55,6 +55,16 @@ export async function contaConectada() {
 // - o contrato nunca redefine o admin desses papeis, entao so o deploy tem.
 export async function papeisDaConta(endereco) {
     if (!endereco) return { admin: false, detran: false, vistoria: false, oficina: false };
+    const papeis = await papeisDasContas([endereco]);
+    return papeis[endereco.toLowerCase()];
+}
+
+// Mesma leitura para varias carteiras de uma vez (ex.: as entidades que
+// assinaram o historico de um veiculo). Devolve { enderecoMinusculo: papeis }.
+// Reflete as funcoes ATUAIS de cada carteira, nao as da epoca do registro.
+export async function papeisDasContas(enderecos) {
+    const unicos = [...new Set(enderecos.filter(Boolean).map((e) => e.toLowerCase()))];
+    if (unicos.length === 0) return {};
 
     const contrato = contratoLeitura();
     const [adminRole, detranRole, vistoriaRole, oficinaRole] = await Promise.all([
@@ -63,13 +73,18 @@ export async function papeisDaConta(endereco) {
         contrato.VISTORIA_ROLE(),
         contrato.OFICINA_ROLE()
     ]);
-    const [admin, detran, vistoria, oficina] = await Promise.all([
-        contrato.hasRole(adminRole, endereco),
-        contrato.hasRole(detranRole, endereco),
-        contrato.hasRole(vistoriaRole, endereco),
-        contrato.hasRole(oficinaRole, endereco)
-    ]);
-    return { admin, detran, vistoria, oficina };
+
+    const resultado = {};
+    await Promise.all(unicos.map(async (endereco) => {
+        const [admin, detran, vistoria, oficina] = await Promise.all([
+            contrato.hasRole(adminRole, endereco),
+            contrato.hasRole(detranRole, endereco),
+            contrato.hasRole(vistoriaRole, endereco),
+            contrato.hasRole(oficinaRole, endereco)
+        ]);
+        resultado[endereco] = { admin, detran, vistoria, oficina };
+    }));
+    return resultado;
 }
 
 // Concede ou revoga OFICINA_ROLE/VISTORIA_ROLE/DETRAN_ROLE a um endereco.

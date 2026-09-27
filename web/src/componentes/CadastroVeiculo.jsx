@@ -1,182 +1,245 @@
 import { useState } from "react";
-import { contratoLeitura, contratoEscrita, linkTransacao } from "../lib/blockchain";
+import { contratoLeitura, contratoEscrita } from "../lib/blockchain";
 import { enviarDocumento } from "../lib/documentos";
+import { mensagemDeErro } from "../lib/erros";
+import { focarPrimeiroErro } from "../lib/foco";
+import { HASH_VAZIO, formatarCpf, km, normalizarChassi, validarChassi } from "../lib/formato";
 import { registrarPrivado } from "../lib/privado";
+import { avisar } from "../lib/toast";
+import Aviso from "../ui/Aviso";
+import Botao from "../ui/Botao";
+import Campo, { CampoArquivo } from "../ui/Campo";
+import Icone from "../ui/Icone";
+import { Concluido, Progresso } from "../ui/Transacao";
 
-const ZERO = "0x0000000000000000000000000000000000000000000000000000000000000000";
+const VAZIO = { chassi: "", placa: "", modelo: "", ano: "", kmInicial: "", nomeProprietario: "", cpfProprietario: "" };
 
 // Exclusivo do DETRAN. Cria o veiculo em cadeia com sua primeira leitura
 // (o proprio cadastro conta como o evento inicial do historico).
-export default function CadastroVeiculo({ usuario, conta }) {
-    const [chassi, setChassi] = useState("");
-    const [placa, setPlaca] = useState("");
-    const [modelo, setModelo] = useState("");
-    const [ano, setAno] = useState("");
-    const [kmInicial, setKmInicial] = useState("");
+export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
+    const [dados, setDados] = useState(VAZIO);
     const [arquivo, setArquivo] = useState(null);
-    const [cpfProprietario, setCpfProprietario] = useState("");
-    const [nomeProprietario, setNomeProprietario] = useState("");
+    const [erros, setErros] = useState({});
 
-    const [etapa, setEtapa] = useState("formulario"); // formulario | revisao | enviando
-    const [status, setStatus] = useState("");
-    const [recibo, setRecibo] = useState(null);
+    const [etapa, setEtapa] = useState("formulario"); // formulario | revisao | enviando | concluido
+    const [verificando, setVerificando] = useState(false);
+    const [passo, setPasso] = useState(null);
+    const [falha, setFalha] = useState("");
+    const [concluido, setConcluido] = useState(null);
 
-    function voltar() {
-        setEtapa("formulario");
-        setStatus("");
-    }
+    const alterar = (campo, valor) => {
+        setDados((d) => ({ ...d, [campo]: valor }));
+        setErros((e) => ({ ...e, [campo]: undefined }));
+    };
 
-    async function revisar() {
-        setStatus("");
-        setRecibo(null);
+    async function revisar(e) {
+        e.preventDefault();
+        setFalha("");
 
-        const alvo = chassi.trim().toUpperCase();
-        if (alvo.length !== 17) return setStatus("O chassi precisa ter 17 caracteres.");
-        if (!placa.trim()) return setStatus("Informe a placa.");
-        if (!modelo.trim()) return setStatus("Informe o modelo.");
-        if (!/^[0-9]{4}$/.test(ano)) return setStatus("Informe o ano com 4 dígitos.");
-        if (!/^[0-9]+$/.test(kmInicial)) return setStatus("Informe a quilometragem em números inteiros.");
-        if (!nomeProprietario.trim()) return setStatus("Informe o nome do proprietário atual.");
-        if (cpfProprietario.replace(/\D/g, "").length !== 11) return setStatus("Informe um CPF válido (11 dígitos).");
+        const novos = {};
+        const problemaChassi = validarChassi(dados.chassi);
+        if (problemaChassi) novos.chassi = problemaChassi;
+        if (!dados.placa.trim()) novos.placa = "Informe a placa.";
+        if (!dados.modelo.trim()) novos.modelo = "Informe o modelo.";
+        if (!/^[0-9]{4}$/.test(dados.ano)) novos.ano = "Informe o ano com 4 dígitos.";
+        if (dados.kmInicial === "") novos.kmInicial = "Informe a quilometragem inicial.";
+        if (!dados.nomeProprietario.trim()) novos.nomeProprietario = "Informe o nome do proprietário atual.";
+        if (dados.cpfProprietario.replace(/\D/g, "").length !== 11) novos.cpfProprietario = "Informe um CPF com 11 dígitos.";
+        setErros(novos);
+        if (Object.keys(novos).length > 0) return focarPrimeiroErro();
 
+        setVerificando(true);
         try {
-            const veiculo = await contratoLeitura().getVeiculo(alvo);
-            if (veiculo.cadastrado) return setStatus("Este chassi já está cadastrado.");
+            const veiculo = await contratoLeitura().getVeiculo(dados.chassi);
+            if (veiculo.cadastrado) return setErros({ chassi: "Este chassi já está cadastrado." });
             setEtapa("revisao");
-        } catch (e) {
-            setStatus("Não foi possível verificar o veículo: " + e.message);
+            window.scrollTo(0, 0);
+        } catch (erro) {
+            setFalha(mensagemDeErro(erro, "Não foi possível verificar o veículo. Tente novamente."));
+        } finally {
+            setVerificando(false);
         }
     }
 
     async function enviar() {
+        setFalha("");
         setEtapa("enviando");
         try {
-            let hash = ZERO;
+            let hash = HASH_VAZIO;
             if (arquivo) {
-                setStatus("Guardando o documento...");
-                hash = await enviarDocumento(arquivo, chassi);
+                setPasso("documento");
+                hash = await enviarDocumento(arquivo, dados.chassi);
             }
 
-            setStatus("Confirme a assinatura na MetaMask...");
+            setPasso("assinatura");
             const contrato = await contratoEscrita();
             const tx = await contrato.cadastrarVeiculo(
-                chassi.trim().toUpperCase(),
-                placa.trim().toUpperCase(),
-                modelo.trim(),
-                Number(ano),
-                BigInt(kmInicial),
+                dados.chassi,
+                dados.modelo.trim(),
+                Number(dados.ano),
+                BigInt(dados.kmInicial),
                 hash
             );
 
-            setStatus("Aguardando a confirmação do bloco...");
-            const r = await tx.wait();
-            setRecibo({ hash: tx.hash, gas: r.gasUsed.toString() });
+            setPasso("confirmacao");
+            const recibo = await tx.wait();
 
-            // CPF/nome do proprietario nunca vao para a blockchain - ficam so
-            // no banco privado, associados a quem de fato fez o cadastro.
-            let avisoPrivado = "";
+            // Placa e CPF/nome do proprietario nunca vao para a blockchain -
+            // ficam so no banco privado, associados a quem fez o cadastro.
+            let privadoFalhou = false;
             try {
                 await registrarPrivado({
-                    chassi, placa, modelo, ano,
-                    cpfProprietario, nomeProprietario,
+                    chassi: dados.chassi,
+                    placa: dados.placa,
+                    modelo: dados.modelo,
+                    ano: dados.ano,
+                    cpfProprietario: dados.cpfProprietario,
+                    nomeProprietario: dados.nomeProprietario,
                     tipoEvento: "Cadastro", carteira: conta, txHash: tx.hash
                 });
             } catch {
-                avisoPrivado = " (o registro privado do proprietário não pôde ser salvo; tente novamente pela aba de registros)";
+                privadoFalhou = true;
             }
 
-            setStatus("Veículo cadastrado." + avisoPrivado);
-            setEtapa("formulario");
-            setChassi("");
-            setPlaca("");
-            setModelo("");
-            setAno("");
-            setKmInicial("");
-            setArquivo(null);
-            setCpfProprietario("");
-            setNomeProprietario("");
-        } catch (e) {
-            if (e.revert?.name === "VeiculoJaCadastrado") {
-                setStatus("Este chassi já está cadastrado.");
-            } else {
-                setStatus("Cadastro recusado: " + (e.reason ?? e.shortMessage ?? e.message));
-            }
+            setConcluido({ recibo: { hash: tx.hash, gas: recibo.gasUsed.toString() }, privadoFalhou, ...dados });
+            setEtapa("concluido");
+            avisar("Veículo cadastrado.");
+        } catch (erro) {
+            setFalha(mensagemDeErro(erro, "Não foi possível concluir o cadastro. Tente novamente."));
             setEtapa("revisao");
+        } finally {
+            setPasso(null);
         }
     }
 
+    function novoCadastro() {
+        setDados(VAZIO);
+        setArquivo(null);
+        setErros({});
+        setConcluido(null);
+        setEtapa("formulario");
+    }
+
+    if (etapa === "concluido") {
+        return (
+            <Concluido
+                titulo="Veículo cadastrado"
+                recibo={concluido.recibo}
+                acoes={
+                    <>
+                        <Botao icone="mais" onClick={novoCadastro}>Cadastrar outro veículo</Botao>
+                        <Botao variante="secundario" onClick={() => aoVerHistorico(concluido.chassi)}>Ver histórico do veículo</Botao>
+                    </>
+                }
+            >
+                <p className="concluido-destaque">{concluido.modelo} · {concluido.ano}</p>
+                <p><span className="mono">{concluido.chassi}</span> · {km(concluido.kmInicial)} iniciais</p>
+                {concluido.privadoFalhou && (
+                    <Aviso tipo="alerta">
+                        A placa e os dados do proprietário não puderam ser salvos nos registros privados.
+                        O histórico do veículo não foi afetado.
+                    </Aviso>
+                )}
+            </Concluido>
+        );
+    }
+
+    if (etapa === "revisao" || etapa === "enviando") {
+        return (
+            <div className="painel">
+                <h2 className="painel-titulo">Confira o cadastro</h2>
+                <p className="painel-texto">Verifique os dados antes de assinar.</p>
+
+                <dl className="lista-dados">
+                    <div><dt>Chassi</dt><dd className="mono">{dados.chassi}</dd></div>
+                    <div><dt>Placa</dt><dd className="mono">{dados.placa.trim().toUpperCase()}</dd></div>
+                    <div><dt>Modelo</dt><dd>{dados.modelo}</dd></div>
+                    <div><dt>Ano</dt><dd>{dados.ano}</dd></div>
+                    <div><dt>Quilometragem inicial</dt><dd className="destaque-numero">{km(dados.kmInicial)}</dd></div>
+                    <div><dt>Proprietário</dt><dd>{dados.nomeProprietario}</dd></div>
+                    <div><dt>CPF</dt><dd>{formatarCpf(dados.cpfProprietario)}</dd></div>
+                    <div><dt>Comprovante</dt><dd>{arquivo ? arquivo.name : "Nenhum anexado"}</dd></div>
+                    <div><dt>Registrado por</dt><dd>{usuario?.nome}</dd></div>
+                </dl>
+
+                <Aviso tipo="info">
+                    Depois de confirmado, o cadastro é definitivo e inicia o histórico público do veículo.
+                </Aviso>
+                {falha && <Aviso tipo="erro">{falha}</Aviso>}
+
+                {etapa === "enviando" ? (
+                    <Progresso passo={passo} comDocumento={Boolean(arquivo)} />
+                ) : (
+                    <div className="acoes acoes-fim">
+                        <Botao variante="secundario" onClick={() => setEtapa("formulario")}>Voltar e editar</Botao>
+                        <Botao onClick={enviar}>Confirmar e assinar</Botao>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
-        <section>
-            <h2>Cadastrar veículo</h2>
-            <p>Exclusivo do DETRAN. Cria o veículo em cadeia com a quilometragem inicial.</p>
-
-            {etapa === "formulario" && (
-                <div>
-                    <input placeholder="Chassi" maxLength={17} value={chassi}
-                        onChange={(e) => setChassi(e.target.value.toUpperCase())} />
-                    <input placeholder="Placa" value={placa}
-                        onChange={(e) => setPlaca(e.target.value.toUpperCase())} />
-                    <input placeholder="Modelo" value={modelo}
-                        onChange={(e) => setModelo(e.target.value)} />
-                    <input placeholder="Ano" type="number" value={ano}
-                        onChange={(e) => setAno(e.target.value)} />
-                    <input placeholder="Quilometragem inicial" type="number" value={kmInicial}
-                        onChange={(e) => setKmInicial(e.target.value)} />
-                    <input placeholder="Nome do proprietário atual" value={nomeProprietario}
-                        onChange={(e) => setNomeProprietario(e.target.value)} />
-                    <input placeholder="CPF do proprietário atual" value={cpfProprietario}
-                        onChange={(e) => setCpfProprietario(e.target.value)} />
-                    <p className="aviso campo">
-                        Nome e CPF ficam só no banco privado do DETRAN — nunca vão para a blockchain.
-                    </p>
-                    <input type="file" accept="application/pdf,image/*"
-                        onChange={(e) => setArquivo(e.target.files[0])} />
-                    <button onClick={revisar}>Revisar cadastro</button>
+        <form className="painel formulario" onSubmit={revisar} noValidate>
+            <fieldset className="grupo">
+                <legend className="grupo-titulo">Identificação</legend>
+                <div className="grade-2">
+                    <Campo rotulo="Chassi" erro={erros.chassi} ajuda={erros.chassi ? undefined : "17 caracteres."}>
+                        <input className="mono" value={dados.chassi} maxLength={17} autoComplete="off"
+                            autoCapitalize="characters" spellCheck={false}
+                            onChange={(e) => alterar("chassi", normalizarChassi(e.target.value))} />
+                    </Campo>
+                    <Campo rotulo="Placa" erro={erros.placa}>
+                        <input className="mono" value={dados.placa} autoComplete="off" autoCapitalize="characters"
+                            onChange={(e) => alterar("placa", e.target.value.toUpperCase())} />
+                    </Campo>
                 </div>
-            )}
+            </fieldset>
 
-            {etapa === "revisao" && (
-                <div className="revisao">
-                    <h3>Confira antes de assinar</h3>
-                    <dl>
-                        <dt>Chassi</dt><dd>{chassi.trim().toUpperCase()}</dd>
-                        <dt>Placa</dt><dd>{placa.trim().toUpperCase()}</dd>
-                        <dt>Modelo</dt><dd>{modelo}</dd>
-                        <dt>Ano</dt><dd>{ano}</dd>
-                        <dt>Quilometragem inicial</dt>
-                        <dd>{Number(kmInicial).toLocaleString("pt-BR")} km</dd>
-                        <dt>Proprietário</dt><dd>{nomeProprietario}</dd>
-                        <dt>CPF</dt><dd>{cpfProprietario}</dd>
-                        <dt>Registrado por</dt><dd>{usuario?.nome}</dd>
-                        <dt>Documento</dt>
-                        <dd>
-                            <input type="file" accept="application/pdf,image/*"
-                                onChange={(e) => setArquivo(e.target.files[0])} />
-                            <span className="nome-arquivo">{arquivo ? arquivo.name : "nenhum anexado"}</span>
-                        </dd>
-                    </dl>
-
-                    <p className="aviso">
-                        Depois de confirmado, o cadastro é definitivo e passa a compor o
-                        histórico público do veículo.
-                    </p>
-
-                    <button onClick={enviar}>Confirmar e assinar</button>
-                    <button onClick={voltar}>Voltar e corrigir</button>
+            <fieldset className="grupo">
+                <legend className="grupo-titulo">Veículo</legend>
+                <div className="grade-2">
+                    <Campo rotulo="Modelo" erro={erros.modelo}>
+                        <input value={dados.modelo} onChange={(e) => alterar("modelo", e.target.value)} />
+                    </Campo>
+                    <Campo rotulo="Ano" erro={erros.ano}>
+                        <input inputMode="numeric" maxLength={4} value={dados.ano}
+                            onChange={(e) => alterar("ano", e.target.value.replace(/\D/g, ""))} />
+                    </Campo>
                 </div>
-            )}
+                <Campo rotulo="Quilometragem inicial" sufixo="km" erro={erros.kmInicial} className="campo-curto">
+                    <input className="entrada-km" inputMode="numeric" autoComplete="off" value={dados.kmInicial}
+                        onChange={(e) => alterar("kmInicial", e.target.value.replace(/\D/g, ""))} />
+                </Campo>
+            </fieldset>
 
-            {etapa === "enviando" && <p>{status}</p>}
-            {etapa !== "enviando" && status && <p>{status}</p>}
-
-            {recibo && (
-                <p>
-                    Gas consumido: {recibo.gas} ·{" "}
-                    <a href={linkTransacao(recibo.hash)} target="_blank" rel="noreferrer">
-                        ver no Etherscan
-                    </a>
+            <fieldset className="grupo">
+                <legend className="grupo-titulo">Proprietário atual</legend>
+                <div className="grade-2">
+                    <Campo rotulo="Nome" erro={erros.nomeProprietario}>
+                        <input value={dados.nomeProprietario} onChange={(e) => alterar("nomeProprietario", e.target.value)} />
+                    </Campo>
+                    <Campo rotulo="CPF" erro={erros.cpfProprietario}>
+                        <input inputMode="numeric" value={dados.cpfProprietario} placeholder="000.000.000-00"
+                            onChange={(e) => alterar("cpfProprietario", e.target.value)} />
+                    </Campo>
+                </div>
+                <p className="nota-privacidade">
+                    <Icone nome="info" tamanho={14} />
+                    Placa, nome e CPF ficam só nos registros privados do DETRAN e não aparecem na consulta pública.
                 </p>
-            )}
-        </section>
+            </fieldset>
+
+            <fieldset className="grupo">
+                <legend className="grupo-titulo">Documento</legend>
+                <CampoArquivo arquivo={arquivo} aoEscolher={setArquivo} ajuda="Documento do veículo ou laudo de cadastro. PDF ou imagem." />
+            </fieldset>
+
+            {falha && <Aviso tipo="erro">{falha}</Aviso>}
+
+            <div className="acoes acoes-fim">
+                <Botao type="submit" carregando={verificando}>Revisar cadastro</Botao>
+            </div>
+        </form>
     );
 }

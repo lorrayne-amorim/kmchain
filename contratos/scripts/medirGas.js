@@ -12,13 +12,14 @@ async function main() {
     const contrato = await ethers.getContractAt("KmChainRegistry", endereco);
     const medidas = [];
 
-    let tx = await contrato.cadastrarVeiculo(CHASSI, "TST0A00", "Modelo Teste", 2020, 30000, DOC);
+    let tx = await contrato.cadastrarVeiculo(CHASSI, "Modelo Teste", 2020, 30000, DOC);
     medidas.push(["cadastrarVeiculo", (await tx.wait()).gasUsed]);
 
-    tx = await contrato.registrarLeitura(CHASSI, 45000, 1, DOC);
+    // avanco acima do limite diario no mesmo dia: confirma como atipica
+    tx = await contrato.registrarLeitura(CHASSI, 45000, 1, DOC, true);
     medidas.push(["registrarLeitura (com documento)", (await tx.wait()).gasUsed]);
 
-    tx = await contrato.registrarLeitura(CHASSI, 46000, 2, ethers.ZeroHash);
+    tx = await contrato.registrarLeitura(CHASSI, 45500, 2, ethers.ZeroHash, false);
     medidas.push(["registrarLeitura (sem documento)", (await tx.wait()).gasUsed]);
 
     console.log("\nOperacao | gas | custo estimado na mainnet");

@@ -1,0 +1,330 @@
+===============================================================================
+                         KMCHAIN - DOCUMENTACAO DO SISTEMA
+                          (estado em 27/09/2026)
+===============================================================================
+
+Site publicado ...... https://kmchain-web.vercel.app
+Repositorio ......... https://github.com/lorrayne-amorim/kmchain
+Contrato (Sepolia) .. 0xC33D1671A149Ed70257d9Ad7f3b8B7a4E75b9fE4
+
+
+-------------------------------------------------------------------------------
+1. O QUE E
+-------------------------------------------------------------------------------
+
+O KmChain e um registro publico e a prova de adulteracao da quilometragem de
+veiculos, gravado na blockchain Ethereum (rede de testes Sepolia).
+
+- Qualquer pessoa consulta o historico de um veiculo de graca, sem carteira
+  e sem cadastro, pelo chassi ou lendo o QR Code da etiqueta.
+- So o DETRAN e as entidades que ele credencia (oficinas e centros de
+  vistoria) podem gravar leituras novas.
+- Uma leitura gravada nao pode ser apagada nem editada. Se estiver errada, o
+  DETRAN registra uma CORRECAO, e a leitura original continua visivel,
+  marcada como "contestada". O efeito e o de um estorno contabil.
+
+Problema que resolve: odometro adulterado na compra e venda de usados. O
+comprador confere o historico completo antes de fechar negocio.
+
+
+-------------------------------------------------------------------------------
+2. ARQUITETURA
+-------------------------------------------------------------------------------
+
+   Navegador (React + Vite)
+      |
+      |-- leitura publica ----------> RPC publico -> Contrato KmChainRegistry
+      |-- escrita (MetaMask) -------> Contrato KmChainRegistry (Sepolia)
+      |
+      '-- /api (Vercel Serverless Functions, Node)
+             |-- auth/*      login e senha ----------> Postgres
+             |-- privado/*   dados sensiveis --------> Postgres
+             |-- upload      documento cifrado ------> IPFS (Pinata)
+             '-- documento   decifra e entrega ------> IPFS + checa papel no contrato
+
+Pastas do repositorio:
+
+  contratos/   Contrato Solidity, testes e scripts (Hardhat)
+  web/         Frontend React e backend /api (deploy na Vercel)
+  docs/        Imagem do QR de exemplo e esta documentacao
+
+
+-------------------------------------------------------------------------------
+3. CONTRATO INTELIGENTE  (contratos/contracts/KmChainRegistry.sol)
+-------------------------------------------------------------------------------
+
+Um unico contrato guarda todos os veiculos. A chave de cada um e o
+keccak256 do chassi (17 caracteres, normalizado para maiusculas).
+Nenhum dado pessoal vai para a cadeia, nem a placa.
+
+PAPEIS (OpenZeppelin AccessControl)
+  DEFAULT_ADMIN_ROLE  quem fez o deploy; concede e revoga papeis
+  DETRAN_ROLE         cadastra veiculo, corrige leitura, define limites
+  VISTORIA_ROLE       registra leituras
+  OFICINA_ROLE        registra leituras
+
+TIPOS DE EVENTO (enum TipoEvento; a ordem importa, porque o indice e o
+valor gravado)
+  0 CADASTRO | 1 VISTORIA | 2 REVISAO | 3 TRANSFERENCIA | 4 SINISTRO | 5 CORRECAO
+
+FUNCOES DE ESCRITA
+  cadastrarVeiculo(chassi, modelo, ano, kmInicial, hashDocumento)   DETRAN
+  registrarLeitura(chassi, km, tipo, hashDocumento, confirmarAtipica)
+                                                   qualquer credenciada
+  corrigirLeitura(chassi, indice, kmCorreta, hashJustificativa)     DETRAN
+  definirLimiteDoVeiculo(chassi, limiteDiario)                      DETRAN
+  definirLimitePadrao(limiteDiario)                                 DETRAN
+
+FUNCOES DE CONSULTA (gratuitas)
+  getVeiculo(chassi), getHistorico(chassi), conformidade(chassi),
+  chaveDoChassi(chassi)
+
+REGRAS DE NEGOCIO
+  1. Nunca aceita quilometragem menor que a ultima valida
+     (erro QuilometragemRegressiva).
+  2. Limite de sanidade: por padrao, 1.000 km por dia desde a ultima leitura
+     (ajustavel por veiculo, util para taxi e frota). Um avanco acima disso
+     NAO e bloqueado: a entidade precisa confirmar explicitamente
+     (confirmarAtipica = true), e a leitura fica marcada como "atipica".
+     Sem a confirmacao, a transacao reverte com LeituraAtipica. Isso barra
+     erro de digitacao sem impedir uso intenso legitimo.
+  3. Numa correcao, a leitura original ganha contestada = true, uma leitura
+     CORRECAO nova e anexada e a "ultima km" passa a ser a maior leitura
+     ainda valida.
+  4. Conformidade: o veiculo e "conforme" quando tem mais de uma leitura e
+     todas depois do cadastro tem documento (hash) anexado.
+
+Testes: contratos/test/KmChainRegistry.test.js
+Scripts (contratos/scripts/):
+  checar.js      diagnostico de rede, conta e saldo antes do deploy
+  deploy.js      publica o contrato
+  credenciar.js  credencia oficina ou vistoria pela linha de comando
+  medirGas.js    mede o gas de cada operacao e projeta o custo na mainnet
+
+
+-------------------------------------------------------------------------------
+4. FRONTEND  (web/src)
+-------------------------------------------------------------------------------
+
+React 19 + Vite 8 + ethers v6. A navegacao e por hash (lib/rota.js), sem
+biblioteca de roteamento:
+
+  /                          Consulta publica
+  /?chassi=XXXXXXXXXXXXXXXXX Consulta direta (link usado pelo QR Code)
+  #/institucional/<secao>    Painel institucional
+
+AREA PUBLICA
+  ConsultaVeiculo.jsx  busca por chassi ou QR, resumo e selo de conformidade
+  Historico.jsx        linha do tempo das leituras (atipicas e contestadas
+                       aparecem marcadas)
+  LeitorQr.jsx         leitura do QR Code pela camera (html5-qrcode)
+
+PAINEL INSTITUCIONAL (Painel.jsx). Cada secao so aparece para quem tem o
+papel necessario, conferido em tempo real no contrato:
+
+  Secao                Quem ve             Componente
+  -------------------  ------------------  -----------------------
+  Inicio               todos logados       Painel.jsx
+  Consultar            todos logados       ConsultaVeiculo.jsx
+  Novo registro        credenciadas        RegistroLeitura.jsx
+  Cadastrar veiculo    DETRAN              CadastroVeiculo.jsx
+  Correcoes            DETRAN              CorrigirLeitura.jsx
+  Registros privados   DETRAN              ConsultaPrivada.jsx
+  Acessos              Admin               CredenciarEntidade.jsx
+
+  Autenticacao.jsx   telas de login e de criacao de conta
+  EtiquetaQr.jsx     gera a etiqueta com QR Code apos o cadastro
+  Cabecalho.jsx      cabecalho e rodape compartilhados
+
+BIBLIOTECAS INTERNAS (web/src/lib)
+  blockchain.js  conexao com o contrato (RPC publico e MetaMask)
+  auth.js        chamadas de login (cookie HttpOnly; o front nunca le o token)
+  privado.js     envio e consulta dos dados privados
+  documentos.js  upload e download dos documentos comprobatorios
+  hash.js        SHA-256 do arquivo, calculado no navegador
+  erros.js       traduz erros de carteira e contrato em mensagens claras
+  formato.js     formatacao e a lista de tipos de evento
+  rota.js, foco.js, toast.js   navegacao, foco em erro de formulario, avisos
+
+COMPONENTES DE INTERFACE (web/src/ui)
+  Botao, Campo, Aviso, Dialogo (<dialog> nativo), Tabela (vira lista no
+  celular), Pagina, Copiar, Icone (tracos no padrao Lucide), Toasts,
+  Transacao (acompanha o status de uma transacao na cadeia)
+
+
+-------------------------------------------------------------------------------
+5. BACKEND  (web/api, Vercel Serverless Functions)
+-------------------------------------------------------------------------------
+
+AUTENTICACAO (web/api/auth)
+  POST cadastrar         cria a conta (nome, e-mail, senha com no minimo 8
+                         caracteres). Nao da nenhum papel: quem define a
+                         funcao e o DETRAN, em cadeia.
+  POST entrar            login; devolve a sessao em cookie
+  GET  eu                usuario logado (lido do banco)
+  POST sair              encerra a sessao
+  POST vincular-carteira associa a carteira MetaMask a conta (exige
+                         assinatura da propria carteira)
+  POST pendentes         lista as contas criadas (so Admin ou DETRAN,
+                         provado por assinatura)
+
+DADOS PRIVADOS (web/api/privado)
+  POST registrar         grava CPF e nome do proprietario, placa, modelo, ano
+                         e QUEM (pessoa, nao so carteira) fez o servico.
+                         Exige login.
+  POST consultar         le esses dados de um chassi. Exige login E carteira
+                         com DETRAN_ROLE provada por assinatura.
+
+DOCUMENTOS
+  POST upload            recebe o arquivo, confere o SHA-256, cifra com
+                         AES-256-GCM e envia ao IPFS (Pinata). Nem o nome
+                         original do arquivo vai para o IPFS.
+  POST documento         entrega o arquivo decifrado somente a uma carteira
+                         credenciada, e confere que o conteudo bate com o
+                         hash gravado em cadeia.
+
+MODULOS COMPARTILHADOS
+  _db.js      pool do Postgres; cria as tabelas sozinho na primeira chamada
+  _sessao.js  token de sessao assinado com HMAC-SHA256, valido por 7 dias,
+              em cookie HttpOnly e SameSite=Lax
+  _chain.js   verificarPapel(): valida a assinatura (janela de 2 minutos) e
+              consulta o papel da carteira no contrato
+  _cripto.js  cifrar/decifrar AES-256-GCM (formato: "KMC1" | IV | tag | dados)
+
+PROVA POR ASSINATURA: as rotas sensiveis pedem que a carteira assine uma
+mensagem com data e hora ("KmChain: ... em <timestamp>"). O servidor recupera
+o endereco a partir da assinatura e pergunta ao contrato se ele tem o papel.
+Nao existe lista paralela de permissoes: o contrato e a fonte da verdade.
+
+
+-------------------------------------------------------------------------------
+6. BANCO DE DADOS  (Postgres)
+-------------------------------------------------------------------------------
+
+usuarios
+  id, nome, email (unico), senha_hash (bcrypt, custo 12), carteira,
+  criado_em
+
+registros_privados
+  id, chassi, placa, modelo, ano, cpf_proprietario, nome_proprietario,
+  tipo_evento, usuario_id, usuario_nome, usuario_email, carteira, tx_hash,
+  criado_em
+  (indice por chassi)
+
+A senha nao pode ser recuperada, porque so o hash fica guardado. Para
+trocar uma senha esquecida, e preciso gravar um hash novo direto no banco.
+
+
+-------------------------------------------------------------------------------
+7. MODELO DE ACESSO (duas camadas)
+-------------------------------------------------------------------------------
+
+  1) Login e senha (conta no Postgres): identifica a PESSOA.
+  2) Carteira MetaMask credenciada na Sepolia: da a PERMISSAO.
+
+Fluxo de uma entidade nova:
+  a. cria a conta no painel (nome, e-mail, senha);
+  b. faz login e vincula a carteira MetaMask (assinando uma mensagem);
+  c. o Admin ou DETRAN ve a conta em "Acessos" e concede o papel em cadeia;
+  d. a partir dai o painel mostra as secoes daquele papel.
+
+A conta sozinha nao da acesso nenhum. A carteira sem login tambem nao entra
+no painel.
+
+
+-------------------------------------------------------------------------------
+8. PRIVACIDADE E SEGURANCA
+-------------------------------------------------------------------------------
+
+- Na blockchain (publica): hash do chassi, modelo, ano, km, data, carteira
+  que assinou, tipo de evento e hash do documento.
+- Fora dela: placa, CPF e nome do proprietario, e o nome de quem fez o
+  servico (no Postgres, lido so pelo DETRAN).
+- Documentos: ficam cifrados no IPFS. Sem a DOCS_KEY ninguem abre, e se a
+  DOCS_KEY for perdida os documentos ja enviados ficam ilegiveis.
+- Segredos (.env.local) nunca vao para o git (.gitignore).
+
+
+-------------------------------------------------------------------------------
+9. VARIAVEIS DE AMBIENTE  (em web/)
+-------------------------------------------------------------------------------
+
+.env (publicas, embutidas no front)
+  VITE_RPC_URL, VITE_CHAIN_ID, VITE_API_URL, VITE_IPFS_GATEWAY, VITE_EXPLORER
+
+.env.local (secretas, so no servidor; na Vercel ficam em Settings >
+Environment Variables)
+  PINATA_JWT      token da Pinata (upload IPFS)
+  GATEWAY         gateway IPFS da Pinata
+  RPC_URL         RPC usado pelo backend para consultar o contrato
+  DATABASE_URL    conexao do Postgres
+  SESSION_SECRET  segredo HMAC do cookie de login
+  DOCS_KEY        chave AES-256 (32 bytes em base64) dos documentos
+
+
+-------------------------------------------------------------------------------
+10. COMO RODAR LOCALMENTE
+-------------------------------------------------------------------------------
+
+Contrato:
+  cd contratos
+  npm install
+  npx hardhat test
+
+Sistema completo (tela + login + /api), em http://localhost:3000:
+  cd web
+  npm install
+  npx vercel dev
+
+  ATENCAO: o "vercel dev" nao carrega o .env.local nas rotas /api. Sem esse
+  arquivo, o login responde "DATABASE_URL nao configurada". Antes de rodar,
+  exporte as variaveis no terminal. No Git Bash:
+
+    while IFS= read -r l || [ -n "$l" ]; do l="${l%$'\r'}";
+      case "$l" in ''|\#*) continue;; esac;
+      export "${l%%=*}=${l#*=}"; done < .env.local
+    npx vercel dev
+
+So a interface (sem login), em http://localhost:5173:
+  cd web
+  npm run dev
+  (nesse modo o Vite serve apenas /api/upload e /api/documento)
+
+Requisitos: Node 20.19+ ou 22.12+ (exigencia do Vite 8) e a extensao
+MetaMask na rede Sepolia para qualquer operacao de escrita.
+
+
+-------------------------------------------------------------------------------
+11. EXPERIMENTAR
+-------------------------------------------------------------------------------
+
+Veiculo de exemplo ja cadastrado na Sepolia:
+  Chassi 7GTNRJMVMHW482160
+  https://kmchain-web.vercel.app/?chassi=7GTNRJMVMHW482160
+  (QR Code em docs/qr-exemplo.png)
+
+
+-------------------------------------------------------------------------------
+12. HISTORICO RECENTE
+-------------------------------------------------------------------------------
+
+- Painel profissional, credenciamento por carteira e visual novo.
+- Login por e-mail e senha, e registros privados do veiculo no Postgres.
+- A funcao da entidade passou a ser definida so pelo DETRAN (saiu do
+  cadastro).
+- Documentos cifrados com AES-256-GCM antes do IPFS.
+- Placa retirada da blockchain; fica so no banco privado.
+- Interface reorganizada: consulta publica unica (ConsultaVeiculo), painel
+  com secoes por papel, biblioteca de componentes em web/src/ui.
+- Correcao: web/api/_chain.js e web/api/documento.js passaram a importar os
+  .json com "with { type: 'json' }". Antes disso o Node derrubava o servidor
+  ao carregar essas rotas.
+
+
+-------------------------------------------------------------------------------
+13. STACK
+-------------------------------------------------------------------------------
+
+Solidity 0.8.24 . Hardhat . OpenZeppelin AccessControl . React 19 . Vite 8 .
+ethers.js 6 . html5-qrcode . qrcode.react . IPFS/Pinata . Postgres (pg) .
+bcryptjs . Vercel

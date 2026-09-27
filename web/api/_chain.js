@@ -2,8 +2,9 @@
 // pela carteira - o mesmo padrao usado em api/documento.js. Nunca existe uma
 // lista paralela de quem pode o que: a fonte da verdade e sempre o contrato.
 import { verifyMessage, JsonRpcProvider, Contract } from "ethers";
-import abi from "../src/lib/KmChainRegistry.abi.json";
-import { endereco } from "../src/lib/endereco.json";
+import abi from "../src/lib/KmChainRegistry.abi.json" with { type: "json" };
+import enderecoJson from "../src/lib/endereco.json" with { type: "json" };
+const { endereco } = enderecoJson;
 
 const JANELA_MS = 2 * 60 * 1000;
 

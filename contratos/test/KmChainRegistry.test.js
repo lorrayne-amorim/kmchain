@@ -16,7 +16,7 @@ describe("KmChainRegistry", function () {
         await contrato.waitForDeployment();
 
         await contrato.grantRole(await contrato.OFICINA_ROLE(), oficina.address);
-        await contrato.cadastrarVeiculo(CHASSI, "ABC1D23", "Gol 1.6", 2018, 50000, DOC);
+        await contrato.cadastrarVeiculo(CHASSI, "Gol 1.6", 2018, 50000, DOC);
     });
 
     // --------------------------------------------------------------- cadastro
@@ -25,6 +25,12 @@ describe("KmChainRegistry", function () {
         expect(v.cadastrado).to.equal(true);
         expect(v.ultimaKm).to.equal(50000n);
         expect(v.totalLeituras).to.equal(1);
+    });
+
+    it("nao guarda a placa em cadeia", async function () {
+        const v = await contrato.getVeiculo(CHASSI);
+        expect(v).to.not.have.property("placa");
+        expect(v.modelo).to.equal("Gol 1.6");
     });
 
     it("normaliza o chassi digitado em minusculas", async function () {

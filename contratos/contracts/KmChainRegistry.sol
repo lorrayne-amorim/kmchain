@@ -7,7 +7,8 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 /// @notice Registro publico e incremental de quilometragem veicular.
 /// @dev Um unico contrato gerencia todos os veiculos por meio de mapeamentos
 ///      indexados pelo hash do chassi. Nenhum dado pessoal do proprietario
-///      e gravado em cadeia.
+///      e gravado em cadeia - nem a placa, que pode identificar o dono e
+///      muda ao longo da vida do veiculo; ela fica so no banco privado.
 contract KmChainRegistry is AccessControl {
     // ---------------------------------------------------------------- papeis
     bytes32 public constant DETRAN_ROLE   = keccak256("DETRAN_ROLE");
@@ -29,7 +30,6 @@ contract KmChainRegistry is AccessControl {
 
     struct Veiculo {
         bool    cadastrado;
-        string  placa;             // campo auxiliar, mutavel ao longo da vida
         string  modelo;
         uint16  ano;
         uint256 ultimaKm;
@@ -49,7 +49,7 @@ contract KmChainRegistry is AccessControl {
     uint32 public limiteDiarioPadrao = 1000;
 
     // --------------------------------------------------------------- eventos
-    event VeiculoCadastrado(bytes32 indexed chassiHash, string placa, uint16 ano);
+    event VeiculoCadastrado(bytes32 indexed chassiHash, string modelo, uint16 ano);
     event LeituraRegistrada(
         bytes32 indexed chassiHash,
         uint256 quilometragem,
@@ -109,7 +109,6 @@ contract KmChainRegistry is AccessControl {
     // -------------------------------------------------------------- escrita
     function cadastrarVeiculo(
         string calldata chassi,
-        string calldata placa,
         string calldata modelo,
         uint16 ano,
         uint256 kmInicial,
@@ -120,7 +119,6 @@ contract KmChainRegistry is AccessControl {
 
         _veiculos[id] = Veiculo({
             cadastrado: true,
-            placa: placa,
             modelo: modelo,
             ano: ano,
             ultimaKm: kmInicial,
@@ -141,7 +139,7 @@ contract KmChainRegistry is AccessControl {
             contestada: false
         }));
 
-        emit VeiculoCadastrado(id, placa, ano);
+        emit VeiculoCadastrado(id, modelo, ano);
         emit LeituraRegistrada(id, kmInicial, TipoEvento.CADASTRO, msg.sender, uint64(block.timestamp), hashDocumento, false);
     }
 

@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { QRCodeCanvas } from "qrcode.react";
+import Botao from "../ui/Botao";
 
 // O QR leva direto para a consulta publica daquele veiculo.
 // Ele fica na etiqueta do vidro, no laudo de vistoria ou no anuncio.
@@ -16,12 +17,18 @@ export default function EtiquetaQr({ chassi }) {
     }
 
     return (
-        <div ref={caixa} className="etiqueta">
-            <QRCodeCanvas value={url} size={180} level="M" includeMargin />
-            <p>Aponte a câmera para ver o histórico de quilometragem</p>
-            <code>{chassi}</code>
-            <button onClick={baixarPng}>Baixar etiqueta</button>
-            <button onClick={() => window.print()}>Imprimir</button>
+        <div className="etiqueta">
+            <div ref={caixa} className="etiqueta-qr">
+                <QRCodeCanvas value={url} size={160} level="M" includeMargin />
+                <div>
+                    <p className="etiqueta-texto">Aponte a câmera para ver o histórico de quilometragem.</p>
+                    <p className="mono etiqueta-chassi">{chassi}</p>
+                </div>
+            </div>
+            <div className="etiqueta-acoes">
+                <Botao variante="secundario" tamanho="p" icone="baixar" onClick={baixarPng}>Baixar imagem</Botao>
+                <Botao variante="secundario" tamanho="p" icone="imprimir" onClick={() => window.print()}>Imprimir</Botao>
+            </div>
         </div>
     );
 }
