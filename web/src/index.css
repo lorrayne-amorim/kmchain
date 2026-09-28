@@ -931,11 +931,12 @@ input[aria-invalid='true']:focus {
   color: var(--texto);
 }
 
+/* Logo mais larga que alta (754x490, fundo transparente): altura fixa e
+   largura proporcional, sem cortar o simbolo. */
 .marca-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--raio-p);
-  object-fit: cover;
+  height: 36px;
+  width: auto;
+  object-fit: contain;
 }
 
 .marca-nome {

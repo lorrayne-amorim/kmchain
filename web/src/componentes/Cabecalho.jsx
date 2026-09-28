@@ -30,7 +30,7 @@ export default function Cabecalho({ inicio = "#/", rotulo, acoes, navegacao, men
         <header className="cabecalho">
             <div className="conteiner cabecalho-barra">
                 <a className="marca" href={inicio}>
-                    <img className="marca-logo" src="/logo.png" alt="" width="28" height="28" />
+                    <img className="marca-logo" src="/logo.png" alt="" width="55" height="36" />
                     <span className="marca-nome">KMChain</span>
                     {rotulo && <span className="marca-rotulo">{rotulo}</span>}
                 </a>
