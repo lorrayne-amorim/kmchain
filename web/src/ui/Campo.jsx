@@ -1,4 +1,5 @@
-import { cloneElement, useId, useRef } from "react";
+import { cloneElement, useId, useRef, useState } from "react";
+import { problemaDoArquivo } from "../lib/documentos";
 import Icone from "./Icone";
 
 // Rotulo sempre visivel, controle, ajuda e erro logo abaixo. O controle
@@ -45,10 +46,22 @@ export default function Campo({ rotulo, ajuda, erro, opcional, sufixo, contador,
 export function CampoArquivo({ rotulo = "Comprovante", ajuda, arquivo, aoEscolher }) {
     const id = useId();
     const entrada = useRef(null);
+    const [erro, setErro] = useState("");
 
     function remover() {
         aoEscolher(null);
+        setErro("");
         if (entrada.current) entrada.current.value = "";
+    }
+
+    function escolher(novo) {
+        const problema = problemaDoArquivo(novo);
+        setErro(problema);
+        if (problema) {
+            if (entrada.current) entrada.current.value = "";
+            return;
+        }
+        aoEscolher(novo ?? null);
     }
 
     return (
@@ -62,10 +75,11 @@ export function CampoArquivo({ rotulo = "Comprovante", ajuda, arquivo, aoEscolhe
                     id={id}
                     type="file"
                     className="visualmente-oculto"
-                    accept="application/pdf,image/*"
+                    accept="application/pdf,image/png,image/jpeg"
                     aria-labelledby={`${id}-rotulo`}
                     aria-describedby={ajuda ? `${id}-ajuda` : undefined}
-                    onChange={(e) => aoEscolher(e.target.files[0] ?? null)}
+                    aria-invalid={erro ? true : undefined}
+                    onChange={(e) => escolher(e.target.files[0])}
                 />
                 {arquivo ? (
                     <>
@@ -83,6 +97,7 @@ export function CampoArquivo({ rotulo = "Comprovante", ajuda, arquivo, aoEscolhe
                     </label>
                 )}
             </div>
+            {erro && <p className="campo-erro" role="alert"><Icone nome="alerta" tamanho={14} />{erro}</p>}
             {ajuda && <p id={`${id}-ajuda`} className="campo-ajuda">{ajuda}</p>}
         </div>
     );

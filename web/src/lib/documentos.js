@@ -1,5 +1,20 @@
-import { BrowserProvider } from "ethers";
+import { assinarComCarteira, chamarApi } from "./api";
 import { hashDoArquivo } from "./hash";
+import { mensagemDocumento } from "./mensagens";
+
+// Mesmo limite do servidor (a Vercel recusa corpos acima de 4,5 MB e o
+// arquivo cresce 4/3 em base64).
+export const TAMANHO_MAXIMO = 3 * 1024 * 1024;
+const TIPOS_ACEITOS = ["application/pdf", "image/png", "image/jpeg"];
+
+// Conferencia antecipada, so para avisar cedo; o servidor confere de novo
+// pelo conteudo do arquivo.
+export function problemaDoArquivo(arquivo) {
+    if (!arquivo) return "";
+    if (arquivo.size > TAMANHO_MAXIMO) return "O arquivo passa de 3 MB. Envie uma versão menor.";
+    if (arquivo.type && !TIPOS_ACEITOS.includes(arquivo.type)) return "Envie o comprovante em PDF, PNG ou JPEG.";
+    return "";
+}
 
 function lerComoBase64(arquivo) {
     return new Promise((resolve, rejeitar) => {
@@ -10,54 +25,37 @@ function lerComoBase64(arquivo) {
     });
 }
 
-// Envio: o arquivo vai para o servidor, que o guarda no Pinata.
+// Envio: o arquivo vai para o servidor, que o cifra e guarda no IPFS.
 // O navegador recebe de volta apenas o hash - nunca o CID.
 export async function enviarDocumento(arquivo, chassi) {
+    const problema = problemaDoArquivo(arquivo);
+    if (problema) throw new Error(problema);
+
     const hash = await hashDoArquivo(arquivo);
-    const conteudoBase64 = await lerComoBase64(arquivo);
-
-    const resposta = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            tipo: arquivo.type,
-            conteudoBase64,
-            chassi,
-            hash
-        })
+    await chamarApi("upload", {
+        corpo: { conteudoBase64: await lerComoBase64(arquivo), chassi, hash },
+        padrao: "O envio do documento falhou."
     });
-
-    if (!resposta.ok) throw new Error("O envio do documento falhou.");
     return hash;
 }
 
-// Abertura: quem pede assina uma mensagem com a carteira; o servidor confere
-// na propria blockchain se aquele endereco tem papel credenciado e devolve o
-// arquivo ja decifrado, que e aberto numa aba a partir da memoria do navegador.
+// Abertura: a carteira vinculada assina o pedido, o servidor aplica a regra
+// de acesso e devolve um link de uso unico, valido por 60 segundos, que
+// abre o arquivo ja decifrado numa aba nova.
 export async function abrirDocumento(hash) {
-    if (!window.ethereum) throw new Error("Abrir o comprovante exige uma carteira credenciada.");
-
-    const provedor = new BrowserProvider(window.ethereum);
-    await provedor.send("eth_requestAccounts", []);
-    const assinante = await provedor.getSigner();
-
-    const emitidoEm = Date.now();
-    const mensagem = `KmChain: acesso ao documento ${hash} em ${emitidoEm}`;
-    const assinatura = await assinante.signMessage(mensagem);
-
-    const resposta = await fetch("/api/documento", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hash, emitidoEm, assinatura })
-    });
-
-    if (resposta.status === 403) throw new Error("Esta carteira não tem permissão para abrir o documento.");
-    if (!resposta.ok) {
-        const { erro } = await resposta.json().catch(() => ({}));
-        throw new Error(erro ?? "Não foi possível abrir o documento.");
+    // A aba e aberta ja no clique: aberta depois da assinatura, o navegador
+    // a trataria como pop-up e bloquearia.
+    const aba = window.open("about:blank", "_blank");
+    try {
+        const prova = await assinarComCarteira((email, emitidoEm) => mensagemDocumento(hash, email, emitidoEm));
+        const { url } = await chamarApi("documento", {
+            corpo: { hash, ...prova },
+            padrao: "Não foi possível abrir o comprovante."
+        });
+        if (aba) aba.location.href = url;
+        else window.location.assign(url);
+    } catch (erro) {
+        aba?.close();
+        throw erro;
     }
-
-    const url = URL.createObjectURL(await resposta.blob());
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

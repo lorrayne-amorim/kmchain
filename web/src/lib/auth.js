@@ -2,20 +2,10 @@
 // da carteira. Fica so aqui - o cookie de sessao e HttpOnly, o front nunca
 // le nem guarda o token, so reage ao {usuario} que cada rota devolve.
 import { BrowserProvider } from "ethers";
+import { chamarApi } from "./api";
+import { mensagemVinculo } from "./mensagens";
 
-async function chamar(rota, corpo) {
-    const resposta = await fetch(`/api/auth/${rota}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(corpo)
-    });
-    const dados = await resposta.json().catch(() => ({}));
-    // Erros 5xx trazem a mensagem interna do servidor: nao vale mostrar.
-    if (resposta.status >= 500) throw new Error("Não foi possível concluir agora. Tente novamente em instantes.");
-    if (!resposta.ok) throw new Error(dados.erro ?? "Não foi possível concluir a operação.");
-    return dados;
-}
+const chamar = (rota, corpo) => chamarApi(`auth/${rota}`, { corpo });
 
 export const criarConta = (nome, email, senha) =>
     chamar("cadastrar", { nome, email, senha });
@@ -23,7 +13,7 @@ export const criarConta = (nome, email, senha) =>
 export const entrar = (email, senha) => chamar("entrar", { email, senha });
 
 export async function sair() {
-    await fetch("/api/auth/sair", { method: "POST", credentials: "same-origin" });
+    await fetch("/api/auth/eu", { method: "DELETE", credentials: "same-origin" });
 }
 
 export async function usuarioLogado() {
@@ -42,8 +32,7 @@ export async function vincularCarteira(carteira, emailDaConta) {
     const assinante = await new BrowserProvider(window.ethereum).getSigner();
 
     const emitidoEm = Date.now();
-    const mensagem = `KmChain: vincular a carteira ${carteira} à conta ${emailDaConta} em ${emitidoEm}`;
-    const assinatura = await assinante.signMessage(mensagem);
+    const assinatura = await assinante.signMessage(mensagemVinculo(carteira, emailDaConta, emitidoEm));
 
     return chamar("vincular-carteira", { carteira, emitidoEm, assinatura });
 }

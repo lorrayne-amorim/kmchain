@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { abrirDocumento } from "../lib/documentos";
 import { mensagemDeErro } from "../lib/erros";
+import { correcoesVerificaveis as calcularVerificaveis, origemDoRegistro } from "../lib/origem";
 import {
     TIPOS, TIPO, dataCurta, dataDe, dataHora, encurtar, numero, rotulosPapel, temDocumento
 } from "../lib/formato";
@@ -15,6 +16,9 @@ import EtiquetaQr from "./EtiquetaQr";
 export default function Historico({ chassi, veiculo, historico, conforme, possuiAtipicas, entidades, institucional }) {
     const total = historico.length;
     const correcoes = Number(veiculo.totalCorrecoes);
+    // Ver lib/origem.js: quando nao da para saber quais registros do tipo
+    // correcao sao reais, nenhum e atribuido ao DETRAN.
+    const correcoesVerificaveis = calcularVerificaveis(historico, correcoes);
 
     // Avanco em relacao a leitura valida anterior (leituras contestadas nao
     // entram na conta). Depois, do mais recente para o mais antigo.
@@ -64,7 +68,7 @@ export default function Historico({ chassi, veiculo, historico, conforme, possui
                         <dd className="resumo-valor">{numero(veiculo.ultimaKm)}<span> km</span></dd>
                     </div>
                     <div className="resumo-item">
-                        <dt>Último registro</dt>
+                        <dt>Último registro em cadeia</dt>
                         <dd className="resumo-valor">{dataCurta(dataDe(veiculo.ultimaData))}</dd>
                     </div>
                     <div className="resumo-item">
@@ -78,7 +82,7 @@ export default function Historico({ chassi, veiculo, historico, conforme, possui
                         <li className={conforme ? "nota-positiva" : ""}>
                             <Icone nome={conforme ? "check" : "info"} tamanho={16} />
                             {conforme
-                                ? "Todos os registros têm comprovante anexado."
+                                ? "Todos os registros após o cadastro têm comprovante anexado."
                                 : "Há registros sem comprovante anexado."}
                         </li>
                     )}
@@ -86,6 +90,12 @@ export default function Historico({ chassi, veiculo, historico, conforme, possui
                         <li className="nota-alerta">
                             <Icone nome="alerta" tamanho={16} />
                             Há leituras com avanço acima do esperado, confirmadas pela entidade responsável.
+                        </li>
+                    )}
+                    {!correcoesVerificaveis && (
+                        <li className="nota-alerta">
+                            <Icone nome="alerta" tamanho={16} />
+                            Há registros do tipo correção que não foram feitos pela função de correção do DETRAN.
                         </li>
                     )}
                     {correcoes > 0 && (
@@ -112,6 +122,7 @@ export default function Historico({ chassi, veiculo, historico, conforme, possui
                             recente={posicao === 0}
                             total={total}
                             papeis={entidades[evento.entidade.toLowerCase()]}
+                            correcoesVerificaveis={correcoesVerificaveis}
                             institucional={institucional}
                         />
                     ))}
@@ -122,6 +133,13 @@ export default function Historico({ chassi, veiculo, historico, conforme, possui
                 <p className="dossie-nota">
                     Os registros não podem ser alterados nem apagados. Uma correção do DETRAN é
                     adicionada ao histórico, e a leitura original continua visível.
+                </p>
+                <p className="dossie-nota">
+                    Cada leitura foi informada por uma carteira credenciada no KmChain, e a data
+                    mostrada é a do registro em cadeia. O histórico não comprova que o hodômetro
+                    marcava o valor real em cada leitura, nem que não houve adulteração antes do
+                    primeiro registro ou entre registros. Credenciamento no KmChain não é
+                    credenciamento oficial por órgão público.
                 </p>
                 <details className="recolhivel">
                     <summary>
@@ -136,14 +154,23 @@ export default function Historico({ chassi, veiculo, historico, conforme, possui
     );
 }
 
-function EventoHistorico({ evento, recente, total, papeis, institucional }) {
+function EventoHistorico({ evento, recente, total, papeis, correcoesVerificaveis, institucional }) {
     const [aberto, setAberto] = useState(false);
     const [abrindo, setAbrindo] = useState(false);
     const [erroDocumento, setErroDocumento] = useState("");
 
-    const responsavel = papeis
-        ? rotulosPapel(papeis).filter((r) => r !== "Administração").join(" · ") || "Sem credencial ativa"
+    // Funcao na epoca so e garantida quando o contrato a exigiu (ver
+    // lib/origem.js); fora isso, a funcao exibida e a ATUAL, rotulada assim.
+    const origem = origemDoRegistro(evento.tipo, evento.indice, correcoesVerificaveis);
+    const exigeDetran = origem === "detran";
+    const tipoSemGarantia = origem === "sem-garantia";
+    const correcaoReal = exigeDetran && evento.tipo === TIPO.CORRECAO;
+    const funcaoAtual = papeis
+        ? rotulosPapel(papeis).filter((r) => r !== "Administração").join(" · ") || "sem função ativa"
         : null;
+    const responsavel = exigeDetran
+        ? "DETRAN"
+        : funcaoAtual ? `Carteira credenciada · função atual: ${funcaoAtual}` : "Carteira credenciada";
     const comDocumento = temDocumento(evento.hashDocumento);
     const idDetalhes = `evento-${evento.indice}-detalhes`;
 
@@ -170,6 +197,7 @@ function EventoHistorico({ evento, recente, total, papeis, institucional }) {
     return (
         <li className={classes}>
             <div className="evento-data">
+                <span className="visualmente-oculto">Registrado em cadeia em </span>
                 <time dateTime={evento.data.toISOString()}>{dataCurta(evento.data)}</time>
                 {recente && <span className="evento-rotulo-recente">Mais recente</span>}
             </div>
@@ -181,9 +209,11 @@ function EventoHistorico({ evento, recente, total, papeis, institucional }) {
                         <span className="evento-avanco">+{numero(evento.avanco)} km</span>
                     )}
                 </p>
-                <p className="evento-tipo">{evento.tipo === TIPO.CORRECAO ? "Correção do DETRAN" : TIPOS[evento.tipo]}</p>
+                <p className="evento-tipo">
+                    {correcaoReal ? "Correção do DETRAN" : tipoSemGarantia ? `Registro marcado como ${TIPOS[evento.tipo].toLowerCase()}` : TIPOS[evento.tipo]}
+                </p>
                 <p className="evento-entidade">
-                    {responsavel ?? "Entidade credenciada"}
+                    {responsavel}
                     <span className="mono">{encurtar(evento.entidade)}</span>
                 </p>
 
@@ -191,6 +221,14 @@ function EventoHistorico({ evento, recente, total, papeis, institucional }) {
                     <p className="evento-nota">
                         <Icone nome="info" tamanho={15} />
                         Leitura corrigida pelo DETRAN. Mantida no histórico para consulta.
+                    </p>
+                )}
+                {tipoSemGarantia && (
+                    <p className="evento-nota evento-nota-alerta">
+                        <Icone nome="alerta" tamanho={15} />
+                        {evento.tipo === TIPO.CADASTRO
+                            ? "Não é o cadastro original do veículo: foi registrado como leitura comum por uma carteira credenciada."
+                            : "Não foi possível confirmar que esta é uma correção do DETRAN. Trate como leitura comum de carteira credenciada."}
                     </p>
                 )}
                 {evento.atipica && (
@@ -215,12 +253,16 @@ function EventoHistorico({ evento, recente, total, papeis, institucional }) {
                     <div id={idDetalhes} className="evento-detalhes">
                         <dl className="lista-dados lista-dados-compacta">
                             <div>
-                                <dt>Data e hora</dt>
+                                <dt>Registrado em cadeia</dt>
                                 <dd>{dataHora(evento.data)}</dd>
                             </div>
                             <div>
-                                <dt>Responsável</dt>
-                                <dd>{responsavel ?? "—"}</dd>
+                                <dt>Função na época</dt>
+                                <dd>{exigeDetran ? "DETRAN (exigido pelo contrato)" : "Credenciada (DETRAN, vistoria ou oficina)"}</dd>
+                            </div>
+                            <div>
+                                <dt>Função atual</dt>
+                                <dd>{funcaoAtual ?? "—"}</dd>
                             </div>
                             <div>
                                 <dt>Comprovante</dt>

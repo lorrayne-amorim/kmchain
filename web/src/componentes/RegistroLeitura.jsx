@@ -3,8 +3,10 @@ import { contratoLeitura, contratoEscrita } from "../lib/blockchain";
 import { enviarDocumento } from "../lib/documentos";
 import { mensagemDeErro } from "../lib/erros";
 import { focarPrimeiroErro } from "../lib/foco";
-import { HASH_VAZIO, TIPO, TIPOS, dataDe, dataNumerica, formatarCpf, km, normalizarChassi, numero, validarChassi } from "../lib/formato";
+import { HASH_VAZIO, TIPO, TIPOS, agoraLocal, dataDe, dataHora, dataNumerica, formatarCpf, km, localParaIso, normalizarChassi, numero, validarChassi } from "../lib/formato";
 import { registrarPrivado } from "../lib/privado";
+import { cpfValido } from "../lib/validar";
+import { problemaDaObservacao } from "../lib/veiculo";
 import { avisar } from "../lib/toast";
 import Aviso from "../ui/Aviso";
 import Botao from "../ui/Botao";
@@ -12,6 +14,7 @@ import Campo, { CampoArquivo } from "../ui/Campo";
 import Dialogo from "../ui/Dialogo";
 import Icone from "../ui/Icone";
 import { Concluido, Progresso } from "../ui/Transacao";
+import PrivadoPendente from "./PrivadoPendente";
 
 // Tipos que uma entidade credenciada registra (Cadastro e Correcao tem
 // telas proprias, exclusivas do DETRAN).
@@ -19,11 +22,12 @@ const EVENTOS = [1, 2, 3, 4];
 
 // Veiculo -> evento -> revisao -> assinatura. A revisao mostra a ultima
 // leitura gravada e o avanco, antes de qualquer assinatura.
-export default function RegistroLeitura({ usuario, conta, aoVerHistorico }) {
+export default function RegistroLeitura({ usuario, aoVerHistorico }) {
     const [chassi, setChassi] = useState("");
     const [veiculo, setVeiculo] = useState(null);
     const [buscando, setBuscando] = useState(false);
     const [kmNova, setKmNova] = useState("");
+    const [observadaEm, setObservadaEm] = useState(agoraLocal);
     const [tipo, setTipo] = useState(1);
     const [arquivo, setArquivo] = useState(null);
     const [nomeNovoProprietario, setNomeNovoProprietario] = useState("");
@@ -94,9 +98,11 @@ export default function RegistroLeitura({ usuario, conta, aoVerHistorico }) {
         const problemaChassi = validarChassi(chassi);
         if (problemaChassi) novos.chassi = problemaChassi;
         if (kmNova === "") novos.km = "Informe a quilometragem.";
+        const problemaObs = problemaDaObservacao(localParaIso(observadaEm));
+        if (problemaObs) novos.observadaEm = problemaObs;
         if (transferencia) {
             if (!nomeNovoProprietario.trim()) novos.nome = "Informe o nome do novo proprietário.";
-            if (cpfNovoProprietario.replace(/\D/g, "").length !== 11) novos.cpf = "Informe um CPF com 11 dígitos.";
+            if (!cpfValido(cpfNovoProprietario)) novos.cpf = "Informe um CPF válido, com 11 dígitos.";
         }
         setErros(novos);
         if (Object.keys(novos).length > 0) return focarPrimeiroErro();
@@ -135,23 +141,26 @@ export default function RegistroLeitura({ usuario, conta, aoVerHistorico }) {
 
             // Registro privado: quem de fato assinou (nome, nao so carteira) e,
             // numa transferencia, os dados do novo proprietario - nunca em cadeia.
-            let privadoFalhou = false;
+            // O servidor confere a transacao; tipo e km vem dela, nao daqui.
+            const dadosPrivados = {
+                chassi, txHash: tx.hash, observadaEm: localParaIso(observadaEm),
+                ...(transferencia && {
+                    nomeProprietario: nomeNovoProprietario,
+                    cpfProprietario: cpfNovoProprietario
+                })
+            };
+            let privadoFalhou = null;
             try {
-                await registrarPrivado({
-                    chassi, tipoEvento: TIPOS[tipo], carteira: conta, txHash: tx.hash,
-                    ...(transferencia && {
-                        nomeProprietario: nomeNovoProprietario,
-                        cpfProprietario: cpfNovoProprietario
-                    })
-                });
-            } catch {
-                privadoFalhou = true;
+                await registrarPrivado(dadosPrivados);
+            } catch (erroPrivado) {
+                privadoFalhou = mensagemDeErro(erroPrivado, "");
             }
 
             setConcluido({
                 recibo: { hash: tx.hash, gas: recibo.gasUsed.toString() },
                 atipica: confirmarAtipica,
                 privadoFalhou,
+                dadosPrivados,
                 chassi,
                 modelo: veiculo?.modelo,
                 km: Number(kmNova),
@@ -180,6 +189,7 @@ export default function RegistroLeitura({ usuario, conta, aoVerHistorico }) {
         setChassi("");
         setVeiculo(null);
         setKmNova("");
+        setObservadaEm(agoraLocal());
         setTipo(1);
         setArquivo(null);
         setHashDoc(null);
@@ -205,11 +215,12 @@ export default function RegistroLeitura({ usuario, conta, aoVerHistorico }) {
                 <p className="concluido-destaque">{km(concluido.km)} · {TIPOS[concluido.tipo]}</p>
                 <p>{concluido.modelo} · <span className="mono">{concluido.chassi}</span></p>
                 {concluido.atipica && <p>A leitura ficou marcada como atípica no histórico público.</p>}
-                {concluido.privadoFalhou && (
-                    <Aviso tipo="alerta">
-                        O nome do responsável{transferencia ? " e os dados do novo proprietário" : ""} não puderam ser
-                        salvos nos registros privados. O histórico do veículo não foi afetado.
-                    </Aviso>
+                {concluido.privadoFalhou !== null && (
+                    <PrivadoPendente
+                        dados={concluido.dadosPrivados}
+                        falhaInicial={concluido.privadoFalhou}
+                        oQue={transferencia ? "O responsável pelo registro e os dados do novo proprietário" : "O responsável pelo registro"}
+                    />
                 )}
             </Concluido>
         );
@@ -242,6 +253,7 @@ export default function RegistroLeitura({ usuario, conta, aoVerHistorico }) {
                     <div><dt>Veículo</dt><dd>{veiculo.modelo} · {veiculo.ano}</dd></div>
                     <div><dt>Chassi</dt><dd className="mono">{chassi}</dd></div>
                     <div><dt>Evento</dt><dd>{TIPOS[tipo]}</dd></div>
+                    <div><dt>Observada em</dt><dd>{dataHora(new Date(observadaEm))}</dd></div>
                     {transferencia && (
                         <>
                             <div><dt>Novo proprietário</dt><dd>{nomeNovoProprietario}</dd></div>
@@ -363,6 +375,15 @@ export default function RegistroLeitura({ usuario, conta, aoVerHistorico }) {
                 >
                     <input className="entrada-km" inputMode="numeric" autoComplete="off" value={kmNova}
                         onChange={(e) => setKmNova(e.target.value.replace(/\D/g, ""))} />
+                </Campo>
+
+                <Campo rotulo="Data e hora da observação" erro={erros.observadaEm} className="campo-curto"
+                    ajuda={erros.observadaEm ? undefined : "Quando o hodômetro foi lido. Até 30 dias atrás. Fica nos registros privados."}>
+                    <input type="datetime-local" value={observadaEm} max={agoraLocal()}
+                        onChange={(e) => {
+                            setObservadaEm(e.target.value);
+                            setErros((er) => ({ ...er, observadaEm: undefined }));
+                        }} />
                 </Campo>
 
                 {transferencia && (

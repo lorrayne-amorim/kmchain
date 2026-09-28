@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { bd } from "../_db.js";
+import { responderErro } from "../_http.js";
 import { criarToken, definirCookieSessao } from "../_sessao.js";
 
 export default async function handler(req, res) {
@@ -24,6 +25,6 @@ export default async function handler(req, res) {
         delete linha.senha_hash;
         res.status(200).json({ usuario: linha });
     } catch (erro) {
-        res.status(500).json({ erro: erro.message });
+        responderErro(res, erro, "auth/entrar");
     }
 }

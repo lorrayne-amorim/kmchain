@@ -151,4 +151,77 @@ describe("KmChainRegistry", function () {
         expect(h.length).to.equal(3);
         expect(h[2].quilometragem).to.equal(51500n);
     });
+
+    // ------------------------------------------------ credenciamento e revogacao
+    it("REJEITA leitura de carteira cuja credencial foi revogada", async function () {
+        await contrato.connect(oficina).registrarLeitura(CHASSI, 50500, 2, DOC, false);
+        await contrato.revokeRole(await contrato.OFICINA_ROLE(), oficina.address);
+        await expect(
+            contrato.connect(oficina).registrarLeitura(CHASSI, 50900, 2, DOC, false)
+        ).to.be.revertedWithCustomError(contrato, "EntidadeNaoAutorizada");
+        // a leitura feita antes da revogacao continua no historico
+        expect((await contrato.getHistorico(CHASSI)).length).to.equal(2);
+    });
+
+    it("so o admin concede papeis; uma carteira DETRAN nao credencia outras", async function () {
+        const [, , , outroDetran, candidata] = await ethers.getSigners();
+        await contrato.grantRole(await contrato.DETRAN_ROLE(), outroDetran.address);
+        await expect(
+            contrato.connect(outroDetran).grantRole(await contrato.OFICINA_ROLE(), candidata.address)
+        ).to.be.revertedWithCustomError(contrato, "AccessControlUnauthorizedAccount");
+    });
+
+    // ------------------------------------------------------------- evidencia
+    it("guarda exatamente o SHA-256 do comprovante e o expoe no historico", async function () {
+        const arquivo = ethers.toUtf8Bytes("%PDF-1.4 laudo ficticio");
+        const hash = ethers.sha256(arquivo);
+        await contrato.connect(oficina).registrarLeitura(CHASSI, 50500, 1, hash, false);
+        const h = await contrato.getHistorico(CHASSI);
+        expect(h[1].hashDocumento).to.equal(hash);
+        // um arquivo alterado em um byte produz outro hash, que nao confere
+        const alterado = ethers.toUtf8Bytes("%PDF-1.4 laudo ficticiO");
+        expect(ethers.sha256(alterado)).to.not.equal(h[1].hashDocumento);
+    });
+
+    it("a correcao preserva a leitura original e registra quem corrigiu", async function () {
+        await contrato.connect(oficina).registrarLeitura(CHASSI, 500000, 2, DOC, true);
+        await expect(contrato.corrigirLeitura(CHASSI, 1, 50600, DOC))
+            .to.emit(contrato, "LeituraCorrigida")
+            .withArgs(await contrato.chaveDoChassi(CHASSI), 1, 500000, 50600, detran.address);
+        const h = await contrato.getHistorico(CHASSI);
+        expect(h[1].quilometragem).to.equal(500000n);
+        expect(h[1].contestada).to.equal(true);
+        expect(h[2].tipo).to.equal(5);
+        expect((await contrato.getVeiculo(CHASSI)).ultimaKm).to.equal(50600n);
+    });
+
+    // ------------------------------------------------- limitacoes documentadas
+    // Estes testes registram o comportamento ATUAL do contrato implantado, que
+    // a proposta de evolucao corrige. Se o contrato mudar, eles devem mudar.
+    it("LIMITACAO: registrarLeitura aceita os tipos CADASTRO e CORRECAO de qualquer credenciada", async function () {
+        await contrato.connect(oficina).registrarLeitura(CHASSI, 50500, 5, DOC, false); // CORRECAO
+        await contrato.connect(oficina).registrarLeitura(CHASSI, 50600, 0, DOC, false); // CADASTRO
+        const h = await contrato.getHistorico(CHASSI);
+        expect(h[1].tipo).to.equal(5);
+        expect(h[1].entidade).to.equal(oficina.address);
+        expect(h[2].tipo).to.equal(0);
+        // nao conta como correcao real: nenhuma leitura foi contestada
+        expect((await contrato.getVeiculo(CHASSI)).totalCorrecoes).to.equal(0);
+    });
+
+    it("LIMITACAO: o contrato nao guarda a funcao da carteira no momento do registro", async function () {
+        await contrato.connect(oficina).registrarLeitura(CHASSI, 50500, 2, DOC, false);
+        await contrato.revokeRole(await contrato.OFICINA_ROLE(), oficina.address);
+        const h = await contrato.getHistorico(CHASSI);
+        expect(Object.keys(h[1].toObject())).to.not.include("papel");
+        expect(await contrato.hasRole(await contrato.OFICINA_ROLE(), oficina.address)).to.equal(false);
+    });
+
+    it("LIMITACAO: a data gravada e a do bloco, nao a da observacao do hodometro", async function () {
+        await ethers.provider.send("evm_increaseTime", [10 * UM_DIA]);
+        const tx = await contrato.connect(oficina).registrarLeitura(CHASSI, 50500, 1, DOC, false);
+        const bloco = await ethers.provider.getBlock((await tx.wait()).blockNumber);
+        const h = await contrato.getHistorico(CHASSI);
+        expect(h[1].data).to.equal(BigInt(bloco.timestamp));
+    });
 });

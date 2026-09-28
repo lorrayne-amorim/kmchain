@@ -136,7 +136,10 @@ export default function CredenciarEntidade() {
         <div className="acessos-grade">
             <section className="painel" ref={formulario} aria-labelledby="titulo-funcao">
                 <h2 id="titulo-funcao" className="painel-titulo">Alterar função de uma carteira</h2>
-                <p className="painel-texto">Selecione uma conta na lista ou informe o endereço da carteira.</p>
+                <p className="painel-texto">
+                    Selecione uma conta na lista ou informe o endereço da carteira. A função vale só dentro do
+                    KmChain e não equivale a credenciamento oficial por Detran, Inmetro ou outro órgão.
+                </p>
 
                 <div className="formulario-empilhado">
                     <Campo rotulo="Carteira da entidade" erro={erroCarteira}

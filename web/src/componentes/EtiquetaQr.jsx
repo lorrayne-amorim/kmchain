@@ -1,12 +1,13 @@
 import { useRef } from "react";
 import { QRCodeCanvas } from "qrcode.react";
+import { linkConsulta } from "../lib/chassi";
 import Botao from "../ui/Botao";
 
 // O QR leva direto para a consulta publica daquele veiculo.
 // Ele fica na etiqueta do vidro, no laudo de vistoria ou no anuncio.
 export default function EtiquetaQr({ chassi }) {
     const caixa = useRef(null);
-    const url = `${window.location.origin}/?chassi=${chassi}`;
+    const url = linkConsulta(window.location.origin, chassi);
 
     function baixarPng() {
         const canvas = caixa.current.querySelector("canvas");

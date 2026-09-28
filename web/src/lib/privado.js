@@ -1,64 +1,42 @@
-// Dados que nunca vao para a blockchain: CPF do proprietario atual e quem,
-// de fato, realizou cada servico. Ficam no banco SQL, atras de login.
-import { BrowserProvider } from "ethers";
+// Dados que nunca vao para a blockchain: CPF do proprietario atual, placa e
+// quem, de fato, realizou cada servico. Ficam no banco SQL, atras de login.
+import { assinarComCarteira, chamarApi } from "./api";
+import { mensagemAlteracao, mensagemContas, mensagemPrivado } from "./mensagens";
 
-// Chamado depois de uma transacao confirmada (cadastro ou leitura), para
-// deixar registrado no banco quem fez o servico e, quando houver, os dados
-// do proprietario. Falha aqui nunca desfaz a transacao ja gravada em cadeia
-// - so avisa, porque o historico publico continua correto sem isso.
-export async function registrarPrivado(dados) {
-    const resposta = await fetch("/api/privado/registrar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(dados)
-    });
-    if (!resposta.ok) {
-        const { erro } = await resposta.json().catch(() => ({}));
-        throw new Error(erro ?? "Não foi possível salvar o registro privado.");
-    }
-}
+// Chamado depois de uma transacao confirmada (cadastro, leitura ou correcao).
+// O servidor confere a transacao na rede; aqui so vai o hash dela e os dados
+// pessoais que a tela coletou. Pode ser repetido sem duplicar o registro.
+export const registrarPrivado = (dados) =>
+    chamarApi("privado/registrar", { corpo: dados, padrao: "Não foi possível salvar o registro privado." });
 
-// Exclusivo do DETRAN: assina uma mensagem provando o papel em cadeia e
-// recebe de volta o CPF/nome do proprietario e quem realizou cada servico.
+// Confere o cadastro no servidor ANTES da assinatura. Devolve o modelo e o
+// ano que devem ir na transacao; recusa com `dados.campos` por campo.
+export const validarCadastro = (dados) =>
+    chamarApi("privado/validar-cadastro", { corpo: dados, padrao: "Não foi possível conferir o cadastro." });
+
+// Exclusivo do DETRAN: assina na hora e recebe a identificacao do veiculo,
+// placa, UF e proprietario (com historico) e quem realizou cada registro.
 export async function consultarPrivado(chassi) {
-    if (!window.ethereum) throw new Error("Conecte a carteira credenciada pelo DETRAN.");
-    const assinante = await new BrowserProvider(window.ethereum).getSigner();
-
-    const emitidoEm = Date.now();
-    const mensagem = `KmChain: consultar registros privados de ${chassi} em ${emitidoEm}`;
-    const assinatura = await assinante.signMessage(mensagem);
-
-    const resposta = await fetch("/api/privado/consultar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ chassi, emitidoEm, assinatura })
+    const prova = await assinarComCarteira((email, emitidoEm) => mensagemPrivado(chassi, email, emitidoEm));
+    return chamarApi("privado/consultar", {
+        corpo: { chassi, ...prova },
+        padrao: "Não foi possível consultar os registros privados."
     });
-    if (resposta.status === 403) throw new Error("Esta carteira não tem credencial DETRAN.");
-    if (!resposta.ok) throw new Error("Não foi possível consultar os registros privados.");
-    const { registros } = await resposta.json();
-    return registros;
 }
 
-// Exclusivo de admin/DETRAN: lista as contas de login aguardando serem
-// credenciadas em cadeia (para achar rapido a carteira de quem pediu acesso).
-export async function contasPendentes() {
-    if (!window.ethereum) throw new Error("Conecte a carteira credenciada.");
-    const assinante = await new BrowserProvider(window.ethereum).getSigner();
-
-    const emitidoEm = Date.now();
-    const mensagem = `KmChain: listar contas pendentes em ${emitidoEm}`;
-    const assinatura = await assinante.signMessage(mensagem);
-
-    const resposta = await fetch("/api/auth/pendentes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ emitidoEm, assinatura })
+// Exclusivo do DETRAN: nova placa, UF ou proprietario, com a data em que
+// passou a valer. Nada anterior e apagado.
+export async function alterarDado(chassi, campo, valores) {
+    const prova = await assinarComCarteira((email, emitidoEm) => mensagemAlteracao(chassi, campo, email, emitidoEm));
+    return chamarApi("privado/alterar", {
+        corpo: { chassi, campo, ...valores, ...prova },
+        padrao: "Não foi possível registrar a alteração."
     });
-    if (resposta.status === 403) throw new Error("Esta carteira não tem credencial para ver esta lista.");
-    if (!resposta.ok) throw new Error("Não foi possível carregar as contas.");
-    const { contas } = await resposta.json();
+}
+
+// Admin ou DETRAN: contas de login, para achar a carteira de quem pediu acesso.
+export async function contasPendentes() {
+    const prova = await assinarComCarteira(mensagemContas);
+    const { contas } = await chamarApi("auth/pendentes", { corpo: prova, padrao: "Não foi possível carregar as contas." });
     return contas;
 }

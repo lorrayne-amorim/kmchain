@@ -239,7 +239,7 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
         <section className="busca" aria-labelledby="titulo-busca">
             <h1 id="titulo-busca" className="busca-titulo">Consulte o histórico de um veículo</h1>
             <p className="busca-descricao">
-                Veja a quilometragem registrada por DETRAN, centros de vistoria e oficinas credenciadas ao longo do tempo.
+                Veja a quilometragem registrada ao longo do tempo pelas entidades credenciadas no KmChain.
             </p>
 
             {formulario}

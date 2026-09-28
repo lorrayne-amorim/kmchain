@@ -1,10 +1,18 @@
-// Quem esta logado agora, direto do banco (nao so do token) - assim, se o
-// DETRAN ja vinculou uma carteira a conta, o front enxerga na hora.
+// Sessao de login.
+// GET: quem esta logado agora, direto do banco (nao so do token) - assim, se
+//      o DETRAN ja vinculou uma carteira a conta, o front enxerga na hora.
+// DELETE: sai (apaga o cookie). Fica na mesma function para caber no limite
+//      de functions por deploy do plano da Vercel.
 import { bd } from "../_db.js";
-import { sessaoAtual } from "../_sessao.js";
+import { responderErro } from "../_http.js";
+import { limparCookieSessao, sessaoAtual } from "../_sessao.js";
 
 export default async function handler(req, res) {
-    if (req.method !== "GET") return res.status(405).json({ erro: "Use GET." });
+    if (req.method === "DELETE") {
+        limparCookieSessao(res);
+        return res.status(200).json({ ok: true });
+    }
+    if (req.method !== "GET") return res.status(405).json({ erro: "Use GET ou DELETE.", codigo: "metodo" });
 
     const sessao = sessaoAtual(req);
     if (!sessao) return res.status(200).json({ usuario: null });
@@ -16,6 +24,6 @@ export default async function handler(req, res) {
         );
         res.status(200).json({ usuario: r.rows[0] ?? null });
     } catch (erro) {
-        res.status(500).json({ erro: erro.message });
+        responderErro(res, erro, "auth/eu");
     }
 }

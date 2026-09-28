@@ -1,18 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { normalizarChassi, validarChassi } from "../lib/formato";
+import { chassiDoLink } from "../lib/chassi";
 import Botao from "../ui/Botao";
 import Icone from "../ui/Icone";
 
-// O QR da etiqueta leva para /?chassi=XXXX (ver EtiquetaQr).
-function chassiDoQr(texto) {
-    try {
-        const chassi = normalizarChassi(new URL(texto).searchParams.get("chassi"));
-        return validarChassi(chassi) ? null : chassi;
-    } catch {
-        return null;
-    }
-}
+// O QR da etiqueta leva para /?chassi=XXXX (ver EtiquetaQr e lib/chassi.js).
 
 const MENSAGENS = {
     iniciando: "Solicitando acesso à câmera…",
@@ -51,7 +43,7 @@ export default function LeitorQr({ aoLer, aoDigitar }) {
             },
             (texto) => {
                 if (concluido || !ativo) return;
-                const chassi = chassiDoQr(texto);
+                const chassi = chassiDoLink(texto);
                 if (chassi) {
                     concluido = true;
                     setEstado("lido");

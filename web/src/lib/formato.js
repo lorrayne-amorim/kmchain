@@ -37,14 +37,8 @@ export function formatarCpf(cpf) {
     return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-export const normalizarChassi = (valor) => String(valor ?? "").replace(/\s/g, "").toUpperCase();
-
-// Devolve a mensagem de erro do campo, ou "" se o chassi estiver valido.
-export function validarChassi(chassi) {
-    if (!chassi) return "Informe o chassi do veículo.";
-    if (chassi.length !== 17) return `O chassi tem 17 caracteres. Você digitou ${chassi.length}.`;
-    return "";
-}
+// Regra unica do chassi (normalizacao, validacao e chave): lib/chassi.js.
+export { normalizarChassi, problemaDoChassi as validarChassi } from "./chassi";
 
 export const carteiraValida = (valor) => /^0x[0-9a-fA-F]{40}$/.test(valor);
 
@@ -67,3 +61,12 @@ export function saudacao(agora = new Date()) {
     if (hora < 18) return "Boa tarde";
     return "Boa noite";
 }
+
+// Campo datetime-local: valor "AAAA-MM-DDTHH:MM" no horario local.
+export function agoraLocal(data = new Date()) {
+    const d = new Date(data.getTime() - data.getTimezoneOffset() * 60000);
+    return d.toISOString().slice(0, 16);
+}
+
+// Converte o valor do datetime-local (horario local) para ISO (UTC).
+export const localParaIso = (valor) => (valor ? new Date(valor).toISOString() : "");

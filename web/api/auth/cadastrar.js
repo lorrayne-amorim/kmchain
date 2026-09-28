@@ -4,6 +4,7 @@
 // A pessoa nao escolhe o que representa: a funcao e atribuida pelo DETRAN.
 import bcrypt from "bcryptjs";
 import { bd } from "../_db.js";
+import { responderErro } from "../_http.js";
 import { criarToken, definirCookieSessao } from "../_sessao.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -40,6 +41,6 @@ export default async function handler(req, res) {
         definirCookieSessao(res, criarToken({ id: usuario.id, email: usuario.email, nome: usuario.nome }));
         res.status(201).json({ usuario });
     } catch (erro) {
-        res.status(500).json({ erro: erro.message });
+        responderErro(res, erro, "auth/cadastrar");
     }
 }

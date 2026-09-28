@@ -3122,3 +3122,128 @@ input.mono::placeholder {
     top: 0;
   }
 }
+
+/* ------------------------------------------------ seletor de marca (combobox) */
+.seletor {
+  position: relative;
+}
+
+.seletor input {
+  padding-right: var(--e10);
+}
+
+.seletor-icone {
+  position: absolute;
+  right: var(--e3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--texto-3);
+  pointer-events: none;
+}
+
+.seletor-lista {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--e1);
+  list-style: none;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra-2);
+}
+
+.seletor-opcao,
+.seletor-vazio {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e2);
+  padding: var(--e2) var(--e3);
+  border-radius: var(--raio-p);
+  font-size: 15px;
+}
+
+.seletor-opcao {
+  cursor: pointer;
+}
+
+.seletor-opcao-ativa {
+  background: var(--verde-suave);
+}
+
+.seletor-vazio {
+  color: var(--texto-3);
+}
+
+.seletor-opcao-nova {
+  justify-content: flex-start;
+  margin-top: var(--e1);
+  border-top: 1px solid var(--borda);
+  border-radius: 0 0 var(--raio-p) var(--raio-p);
+  color: var(--verde-escuro);
+  font-weight: 500;
+}
+
+.seletor-meta {
+  font-size: 12.5px;
+  color: var(--alerta);
+}
+
+.proposta-marca {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+  margin-top: var(--e3);
+  padding: var(--e4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+}
+
+.proposta-marca-texto {
+  font-size: 14px;
+  color: var(--texto-2);
+}
+
+/* informacoes datadas na consulta privada */
+.datado-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.datado-lista li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e3);
+  padding: var(--e2) 0;
+  border-bottom: 1px solid var(--borda);
+  font-size: 14.5px;
+}
+
+.datado-lista li:last-child {
+  border-bottom: 0;
+}
+
+.datado-vigente {
+  font-weight: 600;
+}
+
+.datado-quando {
+  color: var(--texto-3);
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.entidade-leitura {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 15px;
+}

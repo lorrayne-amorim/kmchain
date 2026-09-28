@@ -1,0 +1,338 @@
+{
+  "_sobre": "Lista-base de marcas do KmChain: curada para o prototipo a partir das marcas comercializadas no Brasil (automoveis, motos e pesados). Nao e fonte oficial. O id e estavel e nunca muda depois de publicado; marcas legitimas ausentes entram pelo fluxo de proposta e aprovacao (tabela marcas_adicionais), nunca por edicao automatica.",
+  "versao": "2026-09-27",
+  "marcas": [
+    {
+      "id": "agrale",
+      "nome": "Agrale"
+    },
+    {
+      "id": "alfa-romeo",
+      "nome": "Alfa Romeo"
+    },
+    {
+      "id": "asia-motors",
+      "nome": "Asia Motors"
+    },
+    {
+      "id": "aston-martin",
+      "nome": "Aston Martin"
+    },
+    {
+      "id": "audi",
+      "nome": "Audi"
+    },
+    {
+      "id": "bajaj",
+      "nome": "Bajaj"
+    },
+    {
+      "id": "bentley",
+      "nome": "Bentley"
+    },
+    {
+      "id": "bmw",
+      "nome": "BMW"
+    },
+    {
+      "id": "byd",
+      "nome": "BYD"
+    },
+    {
+      "id": "cadillac",
+      "nome": "Cadillac"
+    },
+    {
+      "id": "caoa-chery",
+      "nome": "Caoa Chery"
+    },
+    {
+      "id": "changan",
+      "nome": "Changan"
+    },
+    {
+      "id": "chery",
+      "nome": "Chery"
+    },
+    {
+      "id": "chevrolet",
+      "nome": "Chevrolet"
+    },
+    {
+      "id": "chrysler",
+      "nome": "Chrysler"
+    },
+    {
+      "id": "citroen",
+      "nome": "Citroën"
+    },
+    {
+      "id": "daewoo",
+      "nome": "Daewoo"
+    },
+    {
+      "id": "daf",
+      "nome": "DAF"
+    },
+    {
+      "id": "dafra",
+      "nome": "Dafra"
+    },
+    {
+      "id": "dodge",
+      "nome": "Dodge"
+    },
+    {
+      "id": "ducati",
+      "nome": "Ducati"
+    },
+    {
+      "id": "effa",
+      "nome": "Effa"
+    },
+    {
+      "id": "envemo",
+      "nome": "Envemo"
+    },
+    {
+      "id": "ferrari",
+      "nome": "Ferrari"
+    },
+    {
+      "id": "fiat",
+      "nome": "Fiat"
+    },
+    {
+      "id": "ford",
+      "nome": "Ford"
+    },
+    {
+      "id": "foton",
+      "nome": "Foton"
+    },
+    {
+      "id": "gac",
+      "nome": "GAC"
+    },
+    {
+      "id": "gurgel",
+      "nome": "Gurgel"
+    },
+    {
+      "id": "gwm",
+      "nome": "GWM"
+    },
+    {
+      "id": "hafei",
+      "nome": "Hafei"
+    },
+    {
+      "id": "haojue",
+      "nome": "Haojue"
+    },
+    {
+      "id": "harley-davidson",
+      "nome": "Harley-Davidson"
+    },
+    {
+      "id": "honda",
+      "nome": "Honda"
+    },
+    {
+      "id": "hyundai",
+      "nome": "Hyundai"
+    },
+    {
+      "id": "iveco",
+      "nome": "Iveco"
+    },
+    {
+      "id": "jac",
+      "nome": "JAC"
+    },
+    {
+      "id": "jaguar",
+      "nome": "Jaguar"
+    },
+    {
+      "id": "jeep",
+      "nome": "Jeep"
+    },
+    {
+      "id": "kasinski",
+      "nome": "Kasinski"
+    },
+    {
+      "id": "kawasaki",
+      "nome": "Kawasaki"
+    },
+    {
+      "id": "kia",
+      "nome": "Kia"
+    },
+    {
+      "id": "ktm",
+      "nome": "KTM"
+    },
+    {
+      "id": "lada",
+      "nome": "Lada"
+    },
+    {
+      "id": "lamborghini",
+      "nome": "Lamborghini"
+    },
+    {
+      "id": "land-rover",
+      "nome": "Land Rover"
+    },
+    {
+      "id": "lexus",
+      "nome": "Lexus"
+    },
+    {
+      "id": "lifan",
+      "nome": "Lifan"
+    },
+    {
+      "id": "mahindra",
+      "nome": "Mahindra"
+    },
+    {
+      "id": "man",
+      "nome": "MAN"
+    },
+    {
+      "id": "maserati",
+      "nome": "Maserati"
+    },
+    {
+      "id": "mclaren",
+      "nome": "McLaren"
+    },
+    {
+      "id": "mercedes-benz",
+      "nome": "Mercedes-Benz"
+    },
+    {
+      "id": "mini",
+      "nome": "Mini"
+    },
+    {
+      "id": "mitsubishi",
+      "nome": "Mitsubishi"
+    },
+    {
+      "id": "neta",
+      "nome": "Neta"
+    },
+    {
+      "id": "nissan",
+      "nome": "Nissan"
+    },
+    {
+      "id": "omoda",
+      "nome": "Omoda"
+    },
+    {
+      "id": "peugeot",
+      "nome": "Peugeot"
+    },
+    {
+      "id": "porsche",
+      "nome": "Porsche"
+    },
+    {
+      "id": "puma",
+      "nome": "Puma"
+    },
+    {
+      "id": "ram",
+      "nome": "RAM"
+    },
+    {
+      "id": "renault",
+      "nome": "Renault"
+    },
+    {
+      "id": "rolls-royce",
+      "nome": "Rolls-Royce"
+    },
+    {
+      "id": "royal-enfield",
+      "nome": "Royal Enfield"
+    },
+    {
+      "id": "scania",
+      "nome": "Scania"
+    },
+    {
+      "id": "shacman",
+      "nome": "Shacman"
+    },
+    {
+      "id": "shineray",
+      "nome": "Shineray"
+    },
+    {
+      "id": "sinotruk",
+      "nome": "Sinotruk"
+    },
+    {
+      "id": "smart",
+      "nome": "Smart"
+    },
+    {
+      "id": "ssangyong",
+      "nome": "SsangYong"
+    },
+    {
+      "id": "subaru",
+      "nome": "Subaru"
+    },
+    {
+      "id": "sundown",
+      "nome": "Sundown"
+    },
+    {
+      "id": "suzuki",
+      "nome": "Suzuki"
+    },
+    {
+      "id": "toyota",
+      "nome": "Toyota"
+    },
+    {
+      "id": "traxx",
+      "nome": "Traxx"
+    },
+    {
+      "id": "triumph",
+      "nome": "Triumph"
+    },
+    {
+      "id": "troller",
+      "nome": "Troller"
+    },
+    {
+      "id": "volkswagen",
+      "nome": "Volkswagen"
+    },
+    {
+      "id": "voltz",
+      "nome": "Voltz"
+    },
+    {
+      "id": "volvo",
+      "nome": "Volvo"
+    },
+    {
+      "id": "yamaha",
+      "nome": "Yamaha"
+    },
+    {
+      "id": "zeekr",
+      "nome": "Zeekr"
+    }
+  ]
+}

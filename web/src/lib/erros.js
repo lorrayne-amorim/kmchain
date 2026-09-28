@@ -1,6 +1,8 @@
 // Traduz erros de carteira, rede e contrato para mensagens que a pessoa
 // consegue entender e agir. Nunca devolve texto tecnico cru (revert data,
 // codigos do ethers etc.).
+import { ErroApi } from "./api";
+
 const REVERTS = {
     VeiculoJaCadastrado: "Este chassi já está cadastrado.",
     VeiculoNaoCadastrado: "Não encontramos um veículo com esse chassi.",
@@ -16,6 +18,8 @@ const TECNICO = /0x[0-9a-f]{8}|revert|execution|call exception|missing|json|rpc|
 
 export function mensagemDeErro(erro, padrao = "Não foi possível concluir a operação. Tente novamente.") {
     if (!erro) return padrao;
+    // As rotas /api ja devolvem uma frase para a pessoa (ver lib/api.js).
+    if (erro instanceof ErroApi) return erro.message;
 
     const codigo = erro.code ?? erro.info?.error?.code;
     if (codigo === "ACTION_REJECTED" || codigo === 4001) return "A assinatura foi cancelada na carteira.";

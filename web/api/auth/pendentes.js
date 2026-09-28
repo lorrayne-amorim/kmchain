@@ -1,20 +1,16 @@
 // Lista as contas cadastradas (login) para o DETRAN localizar quem ja pediu
-// acesso e ainda precisa ser credenciado em cadeia. So quem tem DETRAN_ROLE
-// ou e o admin do contrato enxerga essa lista.
+// acesso e ainda precisa ser credenciado em cadeia. Exige login, carteira
+// vinculada a essa conta assinando na hora e papel Admin ou DETRAN.
 import { bd } from "../_db.js";
-import { verificarPapel } from "../_chain.js";
+import { exigirCarteiraAssinada } from "../_chain.js";
+import { exigirMetodo, responderErro } from "../_http.js";
+import { mensagemContas } from "../../src/lib/mensagens.js";
 
 export default async function handler(req, res) {
-    if (req.method !== "POST") return res.status(405).json({ erro: "Use POST." });
-
     try {
-        const { emitidoEm, assinatura } = req.body ?? {};
-        const mensagem = `KmChain: listar contas pendentes em ${emitidoEm}`;
-        const quemAssinou = await verificarPapel(mensagem, emitidoEm, assinatura, [
-            "DEFAULT_ADMIN_ROLE",
-            "DETRAN_ROLE"
-        ]);
-        if (!quemAssinou) return res.status(403).json({ erro: "Carteira sem credencial para ver esta lista." });
+        exigirMetodo(req, ["POST"]);
+        const { emitidoEm } = req.body ?? {};
+        await exigirCarteiraAssinada(req, ["admin", "detran"], (email) => mensagemContas(email, emitidoEm));
 
         const r = await bd(
             `SELECT nome, email, carteira, criado_em
@@ -22,6 +18,6 @@ export default async function handler(req, res) {
         );
         res.status(200).json({ contas: r.rows });
     } catch (erro) {
-        res.status(500).json({ erro: erro.message });
+        responderErro(res, erro, "auth/pendentes");
     }
 }

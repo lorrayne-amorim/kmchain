@@ -102,8 +102,8 @@ export default function Autenticacao({ aoAutenticar }) {
 
             <p className="acesso-nota">
                 {criando
-                    ? "Depois de criar a conta, conecte a carteira da entidade. O DETRAN define a função dela: oficina, centro de vistoria ou DETRAN."
-                    : "O acesso tem duas etapas: login e carteira da entidade credenciada pelo DETRAN."}
+                    ? "Depois de criar a conta, conecte a carteira da entidade. A administração do KmChain define a função dela: oficina, centro de vistoria ou DETRAN."
+                    : "O acesso tem duas etapas: login e carteira da entidade credenciada no KmChain."}
             </p>
         </div>
     );

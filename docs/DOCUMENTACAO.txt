@@ -8,24 +8,36 @@ Repositorio ......... https://github.com/lorrayne-amorim/kmchain
 Contrato (Sepolia) .. 0x8BcAB5232FFa571B802ac444E5Aba43f7333c49C
                       (anterior, desativado: 0xC33D1671A149Ed70257d9Ad7f3b8B7a4E75b9fE4)
 
+Esta documentacao descreve o comportamento do CODIGO ATUAL do repositorio.
+A analise completa (defeitos, matrizes de entidades e de dados, privacidade,
+proposta de contrato v2 e limitacoes) esta em docs/REVISAO_TECNICA.md.
+
+ATENCAO: o site publicado ainda roda a versao anterior a revisao de
+27/09/2026 (sem os controles de acesso novos) ate o proximo deploy.
+
 
 -------------------------------------------------------------------------------
 1. O QUE E
 -------------------------------------------------------------------------------
 
-O KmChain e um registro publico e a prova de adulteracao da quilometragem de
-veiculos, gravado na blockchain Ethereum (rede de testes Sepolia).
+O KmChain e um prototipo academico que registra leituras de hodometro em uma
+blockchain publica (Ethereum, rede de testes Sepolia).
 
 - Qualquer pessoa consulta o historico de um veiculo de graca, sem carteira
   e sem cadastro, pelo chassi ou lendo o QR Code da etiqueta.
-- So o DETRAN e as entidades que ele credencia (oficinas e centros de
-  vistoria) podem gravar leituras novas.
-- Uma leitura gravada nao pode ser apagada nem editada. Se estiver errada, o
-  DETRAN registra uma CORRECAO, e a leitura original continua visivel,
-  marcada como "contestada". O efeito e o de um estorno contabil.
+- So carteiras credenciadas pelo administrador do contrato gravam leituras.
+  As funcoes (DETRAN, centro de vistoria, oficina) sao SIMULADAS: nao ha
+  integracao com Detran, RENAVE, Inmetro ou oficinas reais, e credenciamento
+  no KmChain nao equivale a credenciamento oficial.
+- Uma leitura gravada nao pode ser apagada nem editada. Se estiver errada,
+  uma carteira DETRAN anexa uma CORRECAO, e a leitura original continua
+  visivel, marcada como "contestada".
 
-Problema que resolve: odometro adulterado na compra e venda de usados. O
-comprador confere o historico completo antes de fechar negocio.
+O que o prototipo mostra: registros feitos por entidades identificadas ficam
+rastreaveis, verificaveis e resistentes a alteracao posterior.
+O que ele NAO mostra: que a quilometragem informada era verdadeira, que o
+hodometro nao foi adulterado antes do primeiro registro ou entre registros,
+nem a identidade fisica de quem assinou.
 
 
 -------------------------------------------------------------------------------
@@ -38,216 +50,254 @@ comprador confere o historico completo antes de fechar negocio.
       |-- escrita (MetaMask) -------> Contrato KmChainRegistry (Sepolia)
       |
       '-- /api (Vercel Serverless Functions, Node)
-             |-- auth/*      login e senha ----------> Postgres
-             |-- privado/*   dados sensiveis --------> Postgres
-             |-- upload      documento cifrado ------> IPFS (Pinata)
-             '-- documento   decifra e entrega ------> IPFS + checa papel no contrato
+             |-- auth/*      login, vinculo de carteira, lista de contas
+             |-- privado/*   dados pessoais (conferidos na transacao)
+             |-- upload      comprovante cifrado -------> IPFS (Pinata)
+             '-- documento   link de uso unico, decifra e confere o hash
 
 Pastas do repositorio:
 
-  contratos/   Contrato Solidity, testes e scripts (Hardhat)
-  web/         Frontend React e backend /api (deploy na Vercel)
-  docs/        Imagem do QR de exemplo e esta documentacao
+  contratos/   Contrato Solidity em uso (v1), proposta v2, testes e scripts
+  web/         Frontend React, rotas /api e testes de integracao
+  docs/        Esta documentacao, a revisao tecnica e o QR de exemplo
 
 
 -------------------------------------------------------------------------------
-3. CONTRATO INTELIGENTE  (contratos/contracts/KmChainRegistry.sol)
+3. CONTRATO EM USO  (contratos/contracts/KmChainRegistry.sol)
 -------------------------------------------------------------------------------
 
-Um unico contrato guarda todos os veiculos. A chave de cada um e o
-keccak256 do chassi (17 caracteres, normalizado para maiusculas).
-Nenhum dado pessoal vai para a cadeia, nem a placa.
+IDENTIFICADOR: o veiculo e identificado pelo CHASSI (VIN, 17 caracteres,
+sem I, O e Q). Placa e RENAVAM nao o substituem. A regra unica de
+normalizacao, validacao e chave esta em web/src/lib/chassi.js e e usada
+pela tela, pelas rotas /api, pelo QR Code e pelos testes:
+    chave = keccak256(chassi normalizado)   (a mesma do contrato v1)
+A chave e um PSEUDONIMO, NAO anonimizacao: quem conhece o chassi calcula a
+chave e localiza o historico publico. No contrato em uso (v1) o chassi
+tambem vai em texto nos dados (calldata) de cada transacao.
+
+Um unico contrato guarda todos os veiculos, indexados por essa chave.
 
 PAPEIS (OpenZeppelin AccessControl)
-  DEFAULT_ADMIN_ROLE  quem fez o deploy; concede e revoga papeis
+  DEFAULT_ADMIN_ROLE  quem fez o deploy; UNICO que concede e revoga papeis
   DETRAN_ROLE         cadastra veiculo, corrige leitura, define limites
   VISTORIA_ROLE       registra leituras
   OFICINA_ROLE        registra leituras
+  (uma carteira so com DETRAN_ROLE NAO credencia outras carteiras)
 
-TIPOS DE EVENTO (enum TipoEvento; a ordem importa, porque o indice e o
-valor gravado)
+TIPOS DE EVENTO (enum TipoEvento)
   0 CADASTRO | 1 VISTORIA | 2 REVISAO | 3 TRANSFERENCIA | 4 SINISTRO | 5 CORRECAO
+  O enum mistura procedimento (vistoria, revisao) e motivo (transferencia,
+  sinistro). A proposta v2 separa os dois.
 
-FUNCOES DE ESCRITA
-  cadastrarVeiculo(chassi, modelo, ano, kmInicial, hashDocumento)   DETRAN
-  registrarLeitura(chassi, km, tipo, hashDocumento, confirmarAtipica)
-                                                   qualquer credenciada
-  corrigirLeitura(chassi, indice, kmCorreta, hashJustificativa)     DETRAN
-  definirLimiteDoVeiculo(chassi, limiteDiario)                      DETRAN
-  definirLimitePadrao(limiteDiario)                                 DETRAN
+REGRAS
+  1. Nunca aceita quilometragem menor que a ultima valida.
+  2. Limite de sanidade (1.000 km/dia por padrao, ajustavel por veiculo):
+     avanco acima dele exige confirmacao explicita e fica marcado "atipica".
+  3. Correcao: a original fica "contestada", uma leitura CORRECAO e anexada e
+     a ultima km passa a ser a maior leitura ainda valida.
+  4. conformidade() diz "conforme" quando ha mais de uma leitura e todas
+     depois do cadastro tem hash de comprovante. Isso NAO atesta que a km e
+     verdadeira; a interface mostra so "todos os registros apos o cadastro
+     tem comprovante anexado".
 
-FUNCOES DE CONSULTA (gratuitas)
-  getVeiculo(chassi), getHistorico(chassi), conformidade(chassi),
-  chaveDoChassi(chassi)
+LIMITACOES CONHECIDAS DO CONTRATO EM USO (comprovadas por teste)
+  - registrarLeitura aceita os tipos CADASTRO e CORRECAO de qualquer
+    credenciada. A interface so atribui ao DETRAN o cadastro original
+    (registro 1) e as correcoes quando a contagem bate com totalCorrecoes;
+    os demais aparecem como "registro marcado como ...", sem garantia.
+  - A funcao da carteira no momento do registro nao fica gravada. A
+    interface mostra "funcao atual" e diz isso.
+  - A data gravada e a do bloco (registro em cadeia), nao a da observacao do
+    hodometro.
 
-REGRAS DE NEGOCIO
-  1. Nunca aceita quilometragem menor que a ultima valida
-     (erro QuilometragemRegressiva).
-  2. Limite de sanidade: por padrao, 1.000 km por dia desde a ultima leitura
-     (ajustavel por veiculo, util para taxi e frota). Um avanco acima disso
-     NAO e bloqueado: a entidade precisa confirmar explicitamente
-     (confirmarAtipica = true), e a leitura fica marcada como "atipica".
-     Sem a confirmacao, a transacao reverte com LeituraAtipica. Isso barra
-     erro de digitacao sem impedir uso intenso legitimo.
-  3. Numa correcao, a leitura original ganha contestada = true, uma leitura
-     CORRECAO nova e anexada e a "ultima km" passa a ser a maior leitura
-     ainda valida.
-  4. Conformidade: o veiculo e "conforme" quando tem mais de uma leitura e
-     todas depois do cadastro tem documento (hash) anexado.
+Testes: contratos/test/KmChainRegistry.test.js (24 testes; com a v2, 38)
+Scripts (contratos/scripts/): checar.js, deploy.js, credenciar.js, medirGas.js
 
-Testes: contratos/test/KmChainRegistry.test.js
-Scripts (contratos/scripts/):
-  checar.js      diagnostico de rede, conta e saldo antes do deploy
-  deploy.js      publica o contrato
-  credenciar.js  credencia oficina ou vistoria pela linha de comando
-  medirGas.js    mede o gas de cada operacao e projeta o custo na mainnet
+NO CADASTRO, o contrato v1 recebe: chassi, um texto de modelo, um ano,
+km inicial e hash do comprovante. O KmChain envia "Marca Modelo" (ex.:
+"Fiat Uno") e o ANO-MODELO, conferidos pelo servidor antes da assinatura.
+
+PROPOSTA v2 (NAO IMPLANTADA): contratos/contracts/KmChainRegistryV2.sol.
+  - recebe a CHAVE (bytes32) em vez do chassi: o chassi nao vai para o
+    calldata nem para os logs;
+  - nao recebe marca, modelo nem anos (ficam no banco privado);
+  - tipo da leitura separado do motivo; origem gravada na epoca; matriz de
+    permissoes por entidade; data da observacao; compromisso da evidencia;
+  - eventos so com a chave e o indice.
+Testes em contratos/test/KmChainRegistryV2.test.js. Plano de migracao em
+docs/REVISAO_TECNICA.md, secao 8.
 
 
 -------------------------------------------------------------------------------
 4. FRONTEND  (web/src)
 -------------------------------------------------------------------------------
 
-React 19 + Vite 8 + ethers v6. A navegacao e por hash (lib/rota.js), sem
-biblioteca de roteamento:
+React 19 + Vite 8 + ethers v6. Navegacao por hash (lib/rota.js):
 
   /                          Consulta publica
   /?chassi=XXXXXXXXXXXXXXXXX Consulta direta (link usado pelo QR Code)
   #/institucional/<secao>    Painel institucional
 
-AREA PUBLICA
-  ConsultaVeiculo.jsx  busca por chassi ou QR, resumo e selo de conformidade
-  Historico.jsx        linha do tempo das leituras (atipicas e contestadas
-                       aparecem marcadas)
-  LeitorQr.jsx         leitura do QR Code pela camera (html5-qrcode)
+PAINEL INSTITUCIONAL (Painel.jsx). Esconder uma secao NAO e controle de
+acesso: quem decide e o contrato (escrita) e as rotas /api (dados privados).
 
-PAINEL INSTITUCIONAL (Painel.jsx). Cada secao so aparece para quem tem o
-papel necessario, conferido em tempo real no contrato:
+  Secao                Aparece para                              Componente
+  -------------------  ----------------------------------------  -----------------------
+  Inicio, Consultar    logado, carteira com algum papel           Painel / ConsultaVeiculo
+  Novo registro        credenciada, com a carteira vinculada      RegistroLeitura
+  Cadastrar veiculo    DETRAN, com a carteira vinculada           CadastroVeiculo
+  Correcoes            DETRAN, com a carteira vinculada           CorrigirLeitura
+  Registros privados   DETRAN, com a carteira vinculada           ConsultaPrivada
+  Acessos              Admin                                      CredenciarEntidade
 
-  Secao                Quem ve             Componente
-  -------------------  ------------------  -----------------------
-  Inicio               todos logados       Painel.jsx
-  Consultar            todos logados       ConsultaVeiculo.jsx
-  Novo registro        credenciadas        RegistroLeitura.jsx
-  Cadastrar veiculo    DETRAN              CadastroVeiculo.jsx
-  Correcoes            DETRAN              CorrigirLeitura.jsx
-  Registros privados   DETRAN              ConsultaPrivada.jsx
-  Acessos              Admin               CredenciarEntidade.jsx
+  Se a carteira conectada nao e a vinculada a conta, o painel avisa e so
+  mostra Inicio e Consultar ate a pessoa trocar de conta na MetaMask ou
+  vincular a carteira nova.
 
-  Autenticacao.jsx   telas de login e de criacao de conta
-  EtiquetaQr.jsx     gera a etiqueta com QR Code apos o cadastro
-  Cabecalho.jsx      cabecalho e rodape compartilhados
+CADASTRO DE VEICULO (CadastroVeiculo.jsx), em tres secoes:
+  1. Identificacao do veiculo: chassi, placa, marca (seletor com busca na
+     lista padronizada src/dados/marcas.json), modelo (texto livre
+     validado), ano de fabricacao, ano-modelo e UF de registro NA DATA DO
+     CADASTRO (informada conforme documento; nunca deduzida da placa).
+  2. Primeira leitura: km observada, data e hora da observacao, entidade
+     que realizou a leitura (a carteira que assina) e comprovante.
+  3. Informacoes privadas: proprietario na data do cadastro (nome e CPF).
+  O servidor valida tudo ANTES da assinatura (privado/validar-cadastro) e
+  devolve o texto de modelo e o ano que vao na transacao. Nada e deduzido
+  do chassi. Marca fora da lista: proposta controlada (fica pendente ate o
+  admin aprovar; nome igual ou parecido com marca existente e recusado ou
+  exige confirmacao), e o cadastro pode seguir com a marca pendente.
+  Nao ha catalogo confiavel e mantido de modelos no projeto, entao o
+  modelo e texto livre: um catalogo incompleto nao bloqueia veiculos
+  antigos, importados ou pouco comuns.
 
-BIBLIOTECAS INTERNAS (web/src/lib)
-  blockchain.js  conexao com o contrato (RPC publico e MetaMask)
-  auth.js        chamadas de login (cookie HttpOnly; o front nunca le o token)
-  privado.js     envio e consulta dos dados privados
-  documentos.js  upload e download dos documentos comprobatorios
-  hash.js        SHA-256 do arquivo, calculado no navegador
-  erros.js       traduz erros de carteira e contrato em mensagens claras
-  formato.js     formatacao e a lista de tipos de evento
-  rota.js, foco.js, toast.js   navegacao, foco em erro de formulario, avisos
+REGISTRO DE LEITURA (RegistroLeitura.jsx): alem da km e do tipo, pede a
+data e hora da observacao (fica no banco privado).
 
-COMPONENTES DE INTERFACE (web/src/ui)
-  Botao, Campo, Aviso, Dialogo (<dialog> nativo), Tabela (vira lista no
-  celular), Pagina, Copiar, Icone (tracos no padrao Lucide), Toasts,
-  Transacao (acompanha o status de uma transacao na cadeia)
+CONSULTA PRIVADA (ConsultaPrivada.jsx, DETRAN): identificacao, placa, UF e
+proprietario com historico datado (vigente em destaque) e "Registrar
+alteracao", que acrescenta uma informacao nova sem apagar a anterior.
 
+CONSULTA PUBLICA (Historico.jsx)
+  - "Registrado em cadeia": data do bloco, nao da observacao.
+  - "Funcao na epoca": so DETRAN no cadastro original e nas correcoes
+    verificaveis; nas demais, "credenciada". "Funcao atual" vem a parte.
+  - Nota fixa sobre o que o historico nao comprova.
 
--------------------------------------------------------------------------------
-5. BACKEND  (web/api, Vercel Serverless Functions)
--------------------------------------------------------------------------------
-
-AUTENTICACAO (web/api/auth)
-  POST cadastrar         cria a conta (nome, e-mail, senha com no minimo 8
-                         caracteres). Nao da nenhum papel: quem define a
-                         funcao e o DETRAN, em cadeia.
-  POST entrar            login; devolve a sessao em cookie
-  GET  eu                usuario logado (lido do banco)
-  POST sair              encerra a sessao
-  POST vincular-carteira associa a carteira MetaMask a conta (exige
-                         assinatura da propria carteira)
-  POST pendentes         lista as contas criadas (so Admin ou DETRAN,
-                         provado por assinatura)
-
-DADOS PRIVADOS (web/api/privado)
-  POST registrar         grava CPF e nome do proprietario, placa, modelo, ano
-                         e QUEM (pessoa, nao so carteira) fez o servico.
-                         Exige login.
-  POST consultar         le esses dados de um chassi. Exige login E carteira
-                         com DETRAN_ROLE provada por assinatura.
-
-DOCUMENTOS
-  POST upload            recebe o arquivo, confere o SHA-256, cifra com
-                         AES-256-GCM e envia ao IPFS (Pinata). Nem o nome
-                         original do arquivo vai para o IPFS.
-  POST documento         entrega o arquivo decifrado somente a uma carteira
-                         credenciada, e confere que o conteudo bate com o
-                         hash gravado em cadeia.
-
-MODULOS COMPARTILHADOS
-  _db.js      pool do Postgres; cria as tabelas sozinho na primeira chamada
-  _sessao.js  token de sessao assinado com HMAC-SHA256, valido por 7 dias,
-              em cookie HttpOnly e SameSite=Lax
-  _chain.js   verificarPapel(): valida a assinatura (janela de 2 minutos) e
-              consulta o papel da carteira no contrato
-  _cripto.js  cifrar/decifrar AES-256-GCM (formato: "KMC1" | IV | tag | dados)
-
-PROVA POR ASSINATURA: as rotas sensiveis pedem que a carteira assine uma
-mensagem com data e hora ("KmChain: ... em <timestamp>"). O servidor recupera
-o endereco a partir da assinatura e pergunta ao contrato se ele tem o papel.
-Nao existe lista paralela de permissoes: o contrato e a fonte da verdade.
+BIBLIOTECAS (web/src/lib)
+  api.js        chamada as rotas /api com mensagem por codigo de erro
+  mensagens.js  texto de cada assinatura (usado pela tela e pelo servidor)
+  validar.js    CPF com digito verificador, placa e chassi (tela e servidor)
+  origem.js     o que o contrato garante sobre a origem de cada registro
+  blockchain.js, auth.js, privado.js, documentos.js, hash.js, erros.js,
+  formato.js, rota.js, foco.js, toast.js
 
 
 -------------------------------------------------------------------------------
-6. BANCO DE DADOS  (Postgres)
+5. ROTAS /api
 -------------------------------------------------------------------------------
 
-usuarios
-  id, nome, email (unico), senha_hash (bcrypt, custo 12), carteira,
-  criado_em
+Modelo de acesso das rotas sensiveis, sempre conferido no servidor:
+  camada 1  sessao de login (a PESSOA);
+  camada 2  carteira VINCULADA a essa conta, com o papel exigido no contrato.
+  Leituras sensiveis pedem ainda que essa carteira assine na hora uma
+  mensagem com o e-mail da conta e o horario (vale 2 minutos).
 
-registros_privados
-  id, chassi, placa, modelo, ano, cpf_proprietario, nome_proprietario,
-  tipo_evento, usuario_id, usuario_nome, usuario_email, carteira, tx_hash,
-  criado_em
-  (indice por chassi)
+As rotas cabem em 12 functions (limite do plano gratuito da Vercel).
 
-A senha nao pode ser recuperada, porque so o hash fica guardado. Para
-trocar uma senha esquecida, e preciso gravar um hash novo direto no banco.
+Erros: o navegador recebe {erro, codigo}; mensagens internas de banco ou RPC
+nunca saem do servidor. Servico fora do ar = 503.
+
+  Rota                         Exige                                   Faz
+  ---------------------------  --------------------------------------  -----------------------------------
+  POST auth/cadastrar          -                                       cria conta (senha >= 8, bcrypt 12)
+  POST auth/entrar             -                                       login (cookie HttpOnly, 7 dias)
+  GET  auth/eu                 -                                       conta logada
+  DELETE auth/eu               -                                       sai (apaga o cookie)
+  POST auth/vincular-carteira  login + assinatura da carteira          1 carteira por conta; troca permitida
+  POST auth/pendentes          login + carteira assinando + Admin/DETRAN   lista de contas
+  GET  marcas                  -                                       lista de marcas (base + adicionais)
+  POST marcas                  login + carteira vinculada DETRAN       propoe marca ausente (fica pendente)
+  PATCH marcas                 login + carteira vinculada Admin        aprova ou recusa marca proposta
+  POST privado/validar-cadastro login + carteira vinculada DETRAN      valida o cadastro antes da assinatura
+  POST privado/registrar       login + carteira vinculada com papel    ver abaixo
+  POST privado/alterar         login + carteira assinando + DETRAN     nova placa, UF ou proprietario, datada
+  POST privado/consultar       login + carteira assinando + DETRAN     dados privados de um chassi
+  POST upload                  login + carteira vinculada com papel    ver abaixo
+  POST documento               login + carteira assinando + papel      emite link de uso unico
+  GET  documento?t=...         login (mesma conta do link)             entrega o arquivo decifrado
+
+privado/registrar: o navegador so informa a transacao (txHash), o chassi e,
+quando cabe, os dados pessoais. O servidor confere na rede que a transacao
+deu certo, foi para o contrato do KmChain, saiu da carteira vinculada a
+conta e tem evento do mesmo chassi. Tipo, km, modelo e ano vem do evento.
+No cadastro, o servidor confere que o modelo e o ano gravados em cadeia sao
+exatamente os validados, e grava identificacao, placa, UF e proprietario
+numa unica instrucao (tudo ou nada). Leituras exigem a data da observacao
+(nao futura, ate 30 dias, nao posterior ao bloco). CPF e nome so em
+cadastro e transferencia; placa e UF so no cadastro (depois, por
+alteracao). Reenviar a mesma transacao nao duplica (a tela oferece "Tentar
+de novo" se falhar).
+
+upload: tipo detectado pelo conteudo (PDF, PNG, JPEG), ate 3 MB, cifrado com
+AES-256-GCM e enviado ao Pinata com nome aleatorio e sem metadados. CID,
+chassi e quem enviou ficam so no banco.
+
+documento: DETRAN abre qualquer comprovante indexado; oficina e vistoria so
+os que a propria conta enviou; comprovantes antigos, sem indice, so DETRAN.
+Link valido por 60 s, uso unico, preso a conta; o arquivo e conferido contra
+o hash em cadeia e sai sem cache. Cada pedido fica em acessos_documentos.
+Limite: 30 pedidos por conta a cada 10 minutos.
 
 
 -------------------------------------------------------------------------------
-7. MODELO DE ACESSO (duas camadas)
+6. BANCO DE DADOS  (Postgres; tabelas criadas sozinhas, migracao aditiva)
 -------------------------------------------------------------------------------
 
-  1) Login e senha (conta no Postgres): identifica a PESSOA.
-  2) Carteira MetaMask credenciada na Sepolia: da a PERMISSAO.
+usuarios            id, nome, email (unico), senha_hash, carteira,
+                    carteira_vinculada_em, criado_em
+registros_privados  um por transacao: chassi, tipo_evento, quilometragem,
+                    observada_em (hodometro), registrado_em_cadeia (bloco),
+                    usuario_id/nome/email, carteira, tx_hash (unico),
+                    criado_em. (placa/cpf/nome so em registros antigos)
+veiculos            chassi, chave, marca_id, marca_nome, modelo,
+                    ano_fabricacao, ano_modelo, cadastro_tx, cadastrado_por
+veiculo_placas      INFORMACOES DATADAS: chassi, valor, vigente_desde,
+veiculo_ufs         origem (cadastro | transferencia | alteracao), tx_hash,
+veiculo_proprietarios  registrado_por. Mudanca = linha nova; nada e
+                    sobrescrito. A vigente e a de maior vigente_desde.
+marcas_adicionais   marcas fora da lista-base: pendente | aprovada | rejeitada
+documentos          hash, cid, mime, tamanho, chassi, enviado_por, carteira
+acessos_documentos  hash_documento, usuario_id, carteira, resultado, criado_em
+tokens_documento    token_hash, hash_documento, usuario_id, expira_em, usado_em
 
-Fluxo de uma entidade nova:
-  a. cria a conta no painel (nome, e-mail, senha);
-  b. faz login e vincula a carteira MetaMask (assinando uma mensagem);
-  c. o Admin ou DETRAN ve a conta em "Acessos" e concede o papel em cadeia;
-  d. a partir dai o painel mostra as secoes daquele papel.
-
-A conta sozinha nao da acesso nenhum. A carteira sem login tambem nao entra
-no painel.
-
-
--------------------------------------------------------------------------------
-8. PRIVACIDADE E SEGURANCA
--------------------------------------------------------------------------------
-
-- Na blockchain (publica): hash do chassi, modelo, ano, km, data, carteira
-  que assinou, tipo de evento e hash do documento.
-- Fora dela: placa, CPF e nome do proprietario, e o nome de quem fez o
-  servico (no Postgres, lido so pelo DETRAN).
-- Documentos: ficam cifrados no IPFS. Sem a DOCS_KEY ninguem abre, e se a
-  DOCS_KEY for perdida os documentos ja enviados ficam ilegiveis.
-- Segredos (.env.local) nunca vao para o git (.gitignore).
+A senha nao pode ser recuperada (so o hash fica guardado).
+O indice unico de carteira so e criado quando nao ha carteira repetida no
+banco; hoje ha uma (ver REVISAO_TECNICA.md, secao 11).
 
 
 -------------------------------------------------------------------------------
-9. VARIAVEIS DE AMBIENTE  (em web/)
+7. PRIVACIDADE (resumo; matriz completa na revisao tecnica, secao 6)
+-------------------------------------------------------------------------------
+
+- Na blockchain, contrato em uso (publica e permanente): chave do chassi, o
+  proprio chassi no calldata, "marca modelo" e ano-modelo (cadastro), km,
+  data do bloco, tipo de evento, carteira que assinou e hash do comprovante.
+- Na proposta v2: chave, km, data do bloco, data da observacao, tipo da
+  leitura, origem, carteira e compromisso da evidencia. Sem chassi em
+  texto, sem marca/modelo/ano, sem motivo.
+- No banco (acesso por login + carteira + papel): identificacao completa,
+  placa, UF de registro e proprietario (datados), data da observacao, quem
+  fez cada registro, indice e auditoria dos comprovantes.
+- No IPFS: so comprovantes cifrados. Envios anteriores a 27/09/2026 tem
+  chassi, tipo e hash nos metadados do Pinata. Nada no IPFS pode ser apagado
+  com garantia.
+- Avaliacao tecnica, nao parecer juridico: uso com dados reais exige
+  validacao juridica e institucional.
+
+
+-------------------------------------------------------------------------------
+8. VARIAVEIS DE AMBIENTE  (em web/)
 -------------------------------------------------------------------------------
 
 .env (publicas, embutidas no front)
@@ -255,80 +305,80 @@ no painel.
 
 .env.local (secretas, so no servidor; na Vercel ficam em Settings >
 Environment Variables)
-  PINATA_JWT      token da Pinata (upload IPFS)
-  GATEWAY         gateway IPFS da Pinata
-  RPC_URL         RPC usado pelo backend para consultar o contrato
-  DATABASE_URL    conexao do Postgres
-  SESSION_SECRET  segredo HMAC do cookie de login
-  DOCS_KEY        chave AES-256 (32 bytes em base64) dos documentos
+  PINATA_JWT         token da Pinata
+  GATEWAY            gateway IPFS da Pinata
+  RPC_URL            RPC usado pelo backend
+  DATABASE_URL       conexao do Postgres
+  SESSION_SECRET     segredo HMAC do cookie de login
+  DOCS_KEY           chave AES-256 (32 bytes em base64) dos arquivos novos
+  DOCS_KEYS_ANTIGAS  (opcional) chaves anteriores, separadas por virgula,
+                     para decifrar arquivos antigos apos uma rotacao
+  KMCHAIN_ENDERECO   (opcional) endereco do contrato; padrao: src/lib/endereco.json
 
 
 -------------------------------------------------------------------------------
-10. COMO RODAR LOCALMENTE
+9. COMO RODAR E TESTAR LOCALMENTE
 -------------------------------------------------------------------------------
 
-Contrato:
+Sistema completo (tela + login + /api), em http://localhost:5173:
+  cd web
+  npm install
+  npm run dev
+  (o servidor do Vite carrega o .env.local e serve todas as rotas /api.
+   Ele usa o banco e a rede configurados no .env.local, ou seja, os reais.)
+
+Testes do contrato (v1 e proposta v2):
   cd contratos
   npm install
   npx hardhat test
 
-Sistema completo (tela + login + /api), em http://localhost:3000:
+Testes de integracao das rotas (Hardhat local + Postgres em memoria +
+Pinata simulado; nao toca na Sepolia nem no banco real):
   cd web
-  npm install
-  npx vercel dev
+  npm test
 
-  ATENCAO: o "vercel dev" nao carrega o .env.local nas rotas /api. Sem esse
-  arquivo, o login responde "DATABASE_URL nao configurada". Antes de rodar,
-  exporte as variaveis no terminal. No Git Bash:
-
-    while IFS= read -r l || [ -n "$l" ]; do l="${l%$'\r'}";
-      case "$l" in ''|\#*) continue;; esac;
-      export "${l%%=*}=${l#*=}"; done < .env.local
-    npx vercel dev
-
-So a interface (sem login), em http://localhost:5173:
+Lint e build:
   cd web
-  npm run dev
-  (nesse modo o Vite serve apenas /api/upload e /api/documento)
+  npx oxlint
+  npm run build
 
-Requisitos: Node 20.19+ ou 22.12+ (exigencia do Vite 8) e a extensao
-MetaMask na rede Sepolia para qualquer operacao de escrita.
+Requisitos: Node 20.19+ ou 22.12+ e a extensao MetaMask na rede Sepolia
+para operacoes de escrita.
 
 
 -------------------------------------------------------------------------------
-11. EXPERIMENTAR
+10. EXPERIMENTAR
 -------------------------------------------------------------------------------
 
-Veiculo de exemplo ja cadastrado na Sepolia:
+Veiculo de exemplo na Sepolia:
   Chassi 7GTNRJMVMHW482160
   https://kmchain-web.vercel.app/?chassi=7GTNRJMVMHW482160
   (QR Code em docs/qr-exemplo.png)
 
 
 -------------------------------------------------------------------------------
-12. HISTORICO RECENTE
+11. HISTORICO RECENTE
 -------------------------------------------------------------------------------
 
 - Painel profissional, credenciamento por carteira e visual novo.
-- Login por e-mail e senha, e registros privados do veiculo no Postgres.
-- A funcao da entidade passou a ser definida so pelo DETRAN (saiu do
-  cadastro).
+- Login por e-mail e senha e registros privados do veiculo no Postgres.
+- Placa fora da blockchain; contrato sem placa publicado em 27/09/2026.
 - Documentos cifrados com AES-256-GCM antes do IPFS.
-- Placa retirada da blockchain; fica so no banco privado.
-- Interface reorganizada: consulta publica unica (ConsultaVeiculo), painel
-  com secoes por papel, biblioteca de componentes em web/src/ui.
-- Contrato sem placa publicado em 27/09/2026 (0x8BcA...c49C). Veiculos e
-  credenciais do contrato anterior nao migram; o veiculo de exemplo foi
-  recriado com o mesmo historico.
-- Correcao: web/api/_chain.js e web/api/documento.js passaram a importar os
-  .json com "with { type: 'json' }". Antes disso o Node derrubava o servidor
-  ao carregar essas rotas.
+- Revisao tecnica de 27/09/2026 (docs/REVISAO_TECNICA.md):
+  - lista de contas: causa do erro (import de .json) e exigencia de login +
+    carteira vinculada;
+  - registro privado conferido na propria transacao, com reenvio seguro;
+  - upload e abertura de comprovantes com controle de acesso, link de uso
+    unico e auditoria; Pinata sem metadados identificaveis;
+  - mensagens de erro por motivo, sem detalhe interno;
+  - consulta publica sem atribuir ao DETRAN o que o contrato nao garante;
+  - testes de integracao das rotas e proposta de contrato v2.
 
 
 -------------------------------------------------------------------------------
-13. STACK
+12. STACK
 -------------------------------------------------------------------------------
 
 Solidity 0.8.24 . Hardhat . OpenZeppelin AccessControl . React 19 . Vite 8 .
 ethers.js 6 . html5-qrcode . qrcode.react . IPFS/Pinata . Postgres (pg) .
-bcryptjs . Vercel
+bcryptjs . PGlite (testes) . Vercel

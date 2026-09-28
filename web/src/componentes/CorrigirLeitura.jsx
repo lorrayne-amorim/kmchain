@@ -3,12 +3,14 @@ import { contratoLeitura, contratoEscrita } from "../lib/blockchain";
 import { enviarDocumento } from "../lib/documentos";
 import { mensagemDeErro } from "../lib/erros";
 import { HASH_VAZIO, TIPOS, dataDe, dataNumerica, km, normalizarChassi, validarChassi } from "../lib/formato";
+import { registrarPrivado } from "../lib/privado";
 import { avisar } from "../lib/toast";
 import Aviso from "../ui/Aviso";
 import Botao from "../ui/Botao";
 import Campo, { CampoArquivo } from "../ui/Campo";
 import Icone from "../ui/Icone";
 import { Concluido, Progresso } from "../ui/Transacao";
+import PrivadoPendente from "./PrivadoPendente";
 
 // Exclusivo do DETRAN. Nao apaga nada: marca a leitura equivocada como
 // contestada e anexa uma correcao com o documento que a justifica.
@@ -28,6 +30,7 @@ export default function CorrigirLeitura({ aoVerHistorico }) {
     const [passo, setPasso] = useState(null);
     const [falha, setFalha] = useState("");
     const [recibo, setRecibo] = useState(null);
+    const [privado, setPrivado] = useState(null); // { dados, falha } se o registro privado falhou
 
     async function carregar(alvo) {
         setErroChassi("");
@@ -64,6 +67,7 @@ export default function CorrigirLeitura({ aoVerHistorico }) {
         setErroKm("");
         setEtapa("selecao");
         setRecibo(null);
+        setPrivado(null);
     }
 
     function revisar(e) {
@@ -88,6 +92,16 @@ export default function CorrigirLeitura({ aoVerHistorico }) {
 
             setPasso("confirmacao");
             const r = await tx.wait();
+
+            // Quem, de fato, fez a correcao fica no registro privado.
+            const dadosPrivados = { chassi: chassiCarregado, txHash: tx.hash };
+            try {
+                await registrarPrivado(dadosPrivados);
+                setPrivado(null);
+            } catch (erroPrivado) {
+                setPrivado({ dados: dadosPrivados, falha: mensagemDeErro(erroPrivado, "") });
+            }
+
             setRecibo({ hash: tx.hash, gas: r.gasUsed.toString() });
             setEtapa("concluido");
             avisar("Correção adicionada ao histórico.");
@@ -133,6 +147,9 @@ export default function CorrigirLeitura({ aoVerHistorico }) {
                     }
                 >
                     <p>A leitura original continua visível, marcada como corrigida.</p>
+                    {privado && (
+                        <PrivadoPendente dados={privado.dados} falhaInicial={privado.falha} oQue="O responsável pela correção" />
+                    )}
                 </Concluido>
             )}
 

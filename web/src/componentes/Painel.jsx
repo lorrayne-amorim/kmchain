@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { conectarCarteira, contaConectada, papeisDaConta } from "../lib/blockchain";
+import { definirContaAtual } from "../lib/api";
 import { usuarioLogado, sair, vincularCarteira } from "../lib/auth";
 import { mensagemDeErro } from "../lib/erros";
 import { encurtar, rotulosPapel, saudacao } from "../lib/formato";
@@ -16,12 +17,13 @@ import ConsultaPrivada from "./ConsultaPrivada";
 import ConsultaVeiculo from "./ConsultaVeiculo";
 import CorrigirLeitura from "./CorrigirLeitura";
 import CredenciarEntidade from "./CredenciarEntidade";
+import MarcasPropostas from "./MarcasPropostas";
 import RegistroLeitura from "./RegistroLeitura";
 
 const SEM_PAPEIS = { admin: false, detran: false, vistoria: false, oficina: false };
 
 // Area do DETRAN/vistoria/oficina, atras de duas camadas: login/senha
-// (conta no banco) e, so depois, a carteira credenciada em cadeia pelo DETRAN.
+// (conta no banco) e, so depois, a carteira credenciada em cadeia pelo admin.
 // As secoes visiveis dependem das funcoes que a carteira tem no contrato.
 export default function Painel({ secao }) {
     const [conta, setConta] = useState(null);
@@ -65,20 +67,26 @@ export default function Painel({ secao }) {
             .finally(() => setCarregandoSessao(false));
     }, []);
 
+    // As assinaturas pedidas ao servidor levam o e-mail desta conta.
+    useEffect(() => definirContaAtual(usuario), [usuario]);
+
     const credenciada = papeis.detran || papeis.vistoria || papeis.oficina;
     const liberado = Boolean(usuario && conta && !verificando && (credenciada || papeis.admin));
+    const vinculada = Boolean(usuario?.carteira && conta && usuario.carteira.toLowerCase() === conta.toLowerCase());
+    // O servidor so aceita registros privados, comprovantes e consultas
+    // sensiveis da carteira vinculada a conta; sem ela, essas secoes somem.
 
     const secoes = [
         { id: "inicio", rotulo: "Início", pode: true },
         { id: "consulta", rotulo: "Consultar", pode: true,
             titulo: "Consultar veículo", descricao: "Veja o histórico completo de quilometragem de um chassi." },
-        { id: "registro", rotulo: "Novo registro", pode: credenciada,
+        { id: "registro", rotulo: "Novo registro", pode: credenciada && vinculada,
             titulo: "Novo registro", descricao: "Registre a quilometragem de uma vistoria, revisão, transferência ou sinistro." },
-        { id: "cadastro", rotulo: "Cadastrar veículo", pode: papeis.detran,
+        { id: "cadastro", rotulo: "Cadastrar veículo", pode: papeis.detran && vinculada,
             titulo: "Cadastrar veículo", descricao: "Inclua um veículo com a quilometragem inicial e os dados do proprietário." },
-        { id: "correcao", rotulo: "Correções", pode: papeis.detran,
+        { id: "correcao", rotulo: "Correções", pode: papeis.detran && vinculada,
             titulo: "Corrigir leitura", descricao: "Corrija uma leitura equivocada. A leitura original continua no histórico." },
-        { id: "privado", rotulo: "Registros privados", pode: papeis.detran,
+        { id: "privado", rotulo: "Registros privados", pode: papeis.detran && vinculada,
             titulo: "Registros privados", descricao: "Consulte placa, proprietário e o responsável por cada serviço." },
         { id: "credenciar", rotulo: "Acessos", pode: papeis.admin,
             titulo: "Acessos", descricao: "Conceda ou revogue funções de oficinas, centros de vistoria e DETRAN." }
@@ -113,7 +121,7 @@ export default function Painel({ secao }) {
         setVinculando(true);
         try {
             await vincularCarteira(conta, usuario.email);
-            setUsuario((u) => ({ ...u, carteira: conta }));
+            setUsuario((u) => ({ ...u, carteira: conta.toLowerCase() }));
             setAvisoVinculo({ tipo: "sucesso", texto: "Carteira vinculada à sua conta." });
         } catch (e) {
             setAvisoVinculo({ tipo: "erro", texto: mensagemDeErro(e, "Não foi possível vincular a carteira.") });
@@ -127,7 +135,6 @@ export default function Painel({ secao }) {
         irPara("consulta");
     }
 
-    const vinculada = Boolean(usuario?.carteira && conta && usuario.carteira.toLowerCase() === conta.toLowerCase());
     const infoConta = usuario && (
         <InfoConta usuario={usuario} conta={conta} papeis={papeis} aoSair={sairDaConta} />
     );
@@ -160,11 +167,13 @@ export default function Painel({ secao }) {
                     <div className="conteiner faixa-aviso">
                         <Aviso
                             tipo={avisoVinculo?.tipo === "erro" ? "erro" : "info"}
-                            acao={<Botao variante="secundario" tamanho="p" carregando={vinculando} onClick={vincular}>Vincular agora</Botao>}
+                            acao={<Botao variante="secundario" tamanho="p" carregando={vinculando} onClick={vincular}>{usuario.carteira ? "Vincular esta carteira" : "Vincular agora"}</Botao>}
                         >
                             {avisoVinculo?.tipo === "erro"
                                 ? avisoVinculo.texto
-                                : "Esta carteira ainda não está vinculada à sua conta. O vínculo identifica quem realizou cada registro."}
+                                : usuario.carteira
+                                    ? <>A carteira conectada não é a vinculada à sua conta (<span className="mono">{encurtar(usuario.carteira)}</span>). Troque de conta na MetaMask para registrar, ou vincule esta carteira no lugar da anterior.</>
+                                    : "Esta carteira ainda não está vinculada à sua conta. Vincule para registrar leituras, enviar comprovantes e ver dados privados: o vínculo identifica quem realizou cada registro."}
                         </Aviso>
                     </div>
                 )}
@@ -174,7 +183,7 @@ export default function Painel({ secao }) {
 
                 {secao === "inicio" && (
                     <Inicio usuario={usuario} conta={conta} papeis={papeis} vinculada={vinculada}
-                        secoes={secoes.filter((s) => s.id !== "inicio")} podeRegistrar={credenciada} />
+                        secoes={secoes.filter((s) => s.id !== "inicio")} podeRegistrar={credenciada && vinculada} />
                 )}
                 {atual && secao !== "inicio" && (
                     <Pagina
@@ -183,11 +192,11 @@ export default function Painel({ secao }) {
                         largura={secao === "consulta" || secao === "privado" || secao === "credenciar" ? "ampla" : "media"}
                     >
                         {secao === "consulta" && <ConsultaVeiculo key={chassiConsulta} institucional chassiInicial={chassiConsulta} />}
-                        {secao === "registro" && <RegistroLeitura usuario={usuario} conta={conta} aoVerHistorico={verHistorico} />}
+                        {secao === "registro" && <RegistroLeitura usuario={usuario} aoVerHistorico={verHistorico} />}
                         {secao === "cadastro" && <CadastroVeiculo usuario={usuario} conta={conta} aoVerHistorico={verHistorico} />}
                         {secao === "correcao" && <CorrigirLeitura aoVerHistorico={verHistorico} />}
                         {secao === "privado" && <ConsultaPrivada />}
-                        {secao === "credenciar" && <CredenciarEntidade />}
+                        {secao === "credenciar" && <div className="empilhado"><CredenciarEntidade /><MarcasPropostas /></div>}
                     </Pagina>
                 )}
             </>
@@ -354,14 +363,15 @@ function EtapasAcesso({
                     <div>
                         <p className="etapa-titulo">Credenciamento</p>
                         {!conta && (
-                            <p className="etapa-texto">O DETRAN define a função da entidade: oficina, centro de vistoria ou DETRAN.</p>
+                            <p className="etapa-texto">A administração do KmChain define a função da entidade: oficina, centro de vistoria ou DETRAN.</p>
                         )}
                         {conta && verificando && <p className="etapa-texto">Verificando as funções desta carteira…</p>}
                         {conta && !verificando && (
                             <>
                                 <p className="etapa-texto">
-                                    Esta carteira ainda não tem uma função atribuída. Informe o endereço abaixo ao
-                                    DETRAN, que define se a entidade é oficina, centro de vistoria ou DETRAN.
+                                    Esta carteira ainda não tem uma função atribuída. Vincule-a à sua conta e informe
+                                    o endereço abaixo à administração do KmChain, que define se a entidade é oficina,
+                                    centro de vistoria ou DETRAN.
                                 </p>
                                 <p className="carteira-destaque">
                                     <span className="mono quebra">{conta}</span>
