@@ -183,6 +183,11 @@ const MIGRACAO = `
         registrado_por  INTEGER REFERENCES usuarios(id),
         criado_em       TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    -- Veiculos cadastrados em cadeia antes da identificacao privada recebem
+    -- a identificacao depois ("complemento"), sem transacao propria.
+    ALTER TABLE veiculos ALTER COLUMN cadastro_tx DROP NOT NULL;
+    ALTER TABLE veiculos ADD COLUMN IF NOT EXISTS origem TEXT NOT NULL DEFAULT 'cadastro';
+
     CREATE INDEX IF NOT EXISTS veiculo_placas_chassi_idx ON veiculo_placas (chassi, vigente_desde);
     CREATE INDEX IF NOT EXISTS veiculo_ufs_chassi_idx ON veiculo_ufs (chassi, vigente_desde);
     CREATE INDEX IF NOT EXISTS veiculo_proprietarios_chassi_idx ON veiculo_proprietarios (chassi, vigente_desde);

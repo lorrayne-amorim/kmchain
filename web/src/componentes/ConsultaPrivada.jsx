@@ -9,6 +9,7 @@ import Botao from "../ui/Botao";
 import Campo from "../ui/Campo";
 import { Vazio } from "../ui/Pagina";
 import Tabela from "../ui/Tabela";
+import CompletarIdentificacao from "./CompletarIdentificacao";
 
 const dataHoraCurta = (valor) => new Date(valor).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const dataCurtaNum = (valor) => new Date(valor).toLocaleDateString("pt-BR");
@@ -80,6 +81,10 @@ export default function ConsultaPrivada() {
                 </div>
             )}
 
+            {dados && !dados.veiculo && (
+                <CompletarIdentificacao chassi={consultado} aoConcluir={() => carregar(consultado)} />
+            )}
+
             {dados && !semNada && (
                 <>
                     <section className="painel" aria-labelledby="titulo-identificacao">
@@ -94,8 +99,7 @@ export default function ConsultaPrivada() {
                             </dl>
                         ) : (
                             <p className="painel-texto">
-                                Veículo cadastrado antes do registro da identificação privada. Marca, modelo e anos
-                                estão só no histórico público.
+                                Sem identificação no cadastro do KMChain. Complete abaixo.
                             </p>
                         )}
                     </section>

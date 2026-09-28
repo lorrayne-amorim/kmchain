@@ -54,6 +54,7 @@ Protótipo acadêmico (TCC) de **histórico de quilometragem de veículos em blo
 ### Consulta pública (qualquer pessoa)
 - Busca pelo **chassi** (17 caracteres), aceitando minúsculas, espaços e hífens.
 - Leitura de **QR Code** pela câmera do celular.
+- **Identificação do veículo:** marca, modelo, ano de fabricação, ano-modelo, placa e UF de registro vigentes. Vem do cadastro do KMChain, não da blockchain, e o proprietário nunca aparece.
 - Histórico completo, do mais recente para o mais antigo, com:
   - quilometragem e avanço desde a leitura anterior;
   - tipo de evento;
@@ -84,6 +85,7 @@ Protótipo acadêmico (TCC) de **histórico de quilometragem de veículos em blo
   - identificação do veículo;
   - placa, UF e proprietário **com histórico datado**;
   - registro de alterações, sem apagar as informações anteriores;
+  - **completar identificação** de um veículo que está na blockchain sem placa, UF e anos no cadastro (o servidor confere marca, modelo e ano-modelo com o que está em cadeia);
   - quem fez cada registro.
 - **Comprovantes:** envio de PDF, PNG ou JPEG até 3 MB e abertura por link de uso único.
 - **Acessos** (Admin):
@@ -138,6 +140,7 @@ Navegador (React + Vite)
    └── /api (Vercel Serverless Functions, Node.js)
           ├── auth/*      login, sessão, vínculo de carteira, lista de contas ──► Postgres
           ├── privado/*   identificação, placa, UF, proprietário (datados) ─────► Postgres
+          ├── veiculo     identificação pública (sem proprietário) e pré-validação ► Postgres
           ├── marcas      lista, proposta e revisão de marcas ──────────────────► Postgres
           ├── upload      comprovante cifrado ──────────────────────────────────► IPFS (Pinata)
           └── documento   link de uso único; decifra e confere o hash ──────────► IPFS + contrato
@@ -154,10 +157,10 @@ Navegador (React + Vite)
 | Dado | Blockchain (contrato em uso) | Banco privado |
 |---|---|---|
 | Chassi | chave `keccak256` + o chassi em texto nos dados da transação | sim |
-| Marca e modelo | sim, num texto só ("Marca Modelo") | sim, separados, com o `id` da marca |
-| Ano de fabricação / ano-modelo | só o ano-modelo | os dois |
-| Placa, UF de registro | **não** | sim, **datados** |
-| Nome e CPF do proprietário | **não** | sim, **datados** |
+| Marca e modelo | sim, num texto só ("Marca Modelo") | sim, separados, com o `id` da marca; aparecem na consulta pública |
+| Ano de fabricação / ano-modelo | só o ano-modelo | os dois; aparecem na consulta pública |
+| Placa, UF de registro | **não** | sim, **datados**; a vigente aparece na consulta pública |
+| Nome e CPF do proprietário | **não** | sim, **datados**; **só o DETRAN vê** |
 | Quilometragem | sim | sim |
 | Data do registro (bloco) | sim | sim |
 | Data da observação do hodômetro | não | sim |
@@ -165,6 +168,8 @@ Navegador (React + Vite)
 | Carteira que assinou | sim | sim |
 | Pessoa que fez o registro | não | sim |
 | Comprovante | só o hash SHA-256 | índice (hash, CID, quem enviou) |
+
+**Consulta pública × blockchain:** placa, UF, marca e anos aparecem para quem busca pelo chassi, mas vêm do cadastro do KMChain, não da blockchain. Assim, podem ser atualizados sem ficar gravados para sempre. O proprietário nunca aparece na consulta pública.
 
 **Informações datadas:** uma mudança de placa, UF ou proprietário entra como **nova linha**, com a data em que passou a valer. Nada é sobrescrito, e o histórico anterior continua consultável.
 
@@ -282,7 +287,7 @@ O `npm run dev` carrega o `.env.local` e serve todas as rotas `/api`, **usando o
 
 ```bash
 cd contratos && npx hardhat test    # 38 testes: contrato em uso + proposta v2
-cd web && npm test                  # 55 testes: rotas /api de ponta a ponta
+cd web && npm test                  # 60 testes: rotas /api de ponta a ponta
 cd web && npx oxlint && npm run build
 ```
 

@@ -13,7 +13,7 @@ import EtiquetaQr from "./EtiquetaQr";
 // Dossie do veiculo: identificacao, resumo e a linha do tempo. A
 // quilometragem e o dado principal de cada registro; hash, carteira e
 // comprovante ficam dentro de "Ver detalhes".
-export default function Historico({ chassi, veiculo, historico, conforme, possuiAtipicas, entidades, institucional }) {
+export default function Historico({ chassi, veiculo, identificacao, historico, conforme, possuiAtipicas, entidades, institucional }) {
     const total = historico.length;
     const correcoes = Number(veiculo.totalCorrecoes);
     // Ver lib/origem.js: quando nao da para saber quais registros do tipo
@@ -48,17 +48,41 @@ export default function Historico({ chassi, veiculo, historico, conforme, possui
         <article className="dossie">
             <header className="dossie-cabecalho">
                 <p className="sobretitulo">Veículo consultado</p>
-                <h1 className="dossie-titulo">{veiculo.modelo}</h1>
+                <h1 className="dossie-titulo">
+                    {identificacao ? `${identificacao.marca_nome} ${identificacao.modelo}` : veiculo.modelo}
+                </h1>
                 <dl className="dossie-meta">
                     <div>
                         <dt>Chassi</dt>
                         <dd><span className="mono">{chassi}</span><Copiar texto={chassi} rotulo="Copiar chassi" /></dd>
                     </div>
-                    <div>
-                        <dt>Ano</dt>
-                        <dd>{Number(veiculo.ano)}</dd>
-                    </div>
+                    {identificacao ? (
+                        <>
+                            <div>
+                                <dt>Placa</dt>
+                                <dd className="mono">{identificacao.placa ?? "—"}</dd>
+                            </div>
+                            <div>
+                                <dt>UF de registro</dt>
+                                <dd>{identificacao.uf ?? "—"}</dd>
+                            </div>
+                            <div>
+                                <dt>Fabricação / modelo</dt>
+                                <dd>{identificacao.ano_fabricacao} / {identificacao.ano_modelo}</dd>
+                            </div>
+                        </>
+                    ) : (
+                        <div>
+                            <dt>Ano-modelo</dt>
+                            <dd>{Number(veiculo.ano)}</dd>
+                        </div>
+                    )}
                 </dl>
+                {identificacao && (
+                    <p className="dossie-nota">
+                        Placa e UF vigentes, informadas pelo DETRAN. Ficam no cadastro do KMChain, não na blockchain.
+                    </p>
+                )}
             </header>
 
             <section className="resumo" aria-label="Resumo do histórico">

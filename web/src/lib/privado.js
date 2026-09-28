@@ -12,7 +12,7 @@ export const registrarPrivado = (dados) =>
 // Confere o cadastro no servidor ANTES da assinatura. Devolve o modelo e o
 // ano que devem ir na transacao; recusa com `dados.campos` por campo.
 export const validarCadastro = (dados) =>
-    chamarApi("privado/validar-cadastro", { corpo: dados, padrao: "Não foi possível conferir o cadastro." });
+    chamarApi("veiculo", { corpo: dados, padrao: "Não foi possível conferir o cadastro." });
 
 // Exclusivo do DETRAN: assina na hora e recebe a identificacao do veiculo,
 // placa, UF e proprietario (com historico) e quem realizou cada registro.

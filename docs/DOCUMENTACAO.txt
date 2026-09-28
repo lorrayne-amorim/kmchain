@@ -162,7 +162,7 @@ CADASTRO DE VEICULO (CadastroVeiculo.jsx), em tres secoes:
   2. Primeira leitura: km observada, data e hora da observacao, entidade
      que realizou a leitura (a carteira que assina) e comprovante.
   3. Informacoes privadas: proprietario na data do cadastro (nome e CPF).
-  O servidor valida tudo ANTES da assinatura (privado/validar-cadastro) e
+  O servidor valida tudo ANTES da assinatura (POST /api/veiculo) e
   devolve o texto de modelo e o ano que vao na transacao. Nada e deduzido
   do chassi. Marca fora da lista: proposta controlada (fica pendente ate o
   admin aprovar; nome igual ou parecido com marca existente e recusado ou
@@ -177,6 +177,15 @@ data e hora da observacao (fica no banco privado).
 CONSULTA PRIVADA (ConsultaPrivada.jsx, DETRAN): identificacao, placa, UF e
 proprietario com historico datado (vigente em destaque) e "Registrar
 alteracao", que acrescenta uma informacao nova sem apagar a anterior.
+
+CONSULTA PUBLICA (ConsultaVeiculo.jsx + Historico.jsx): o historico vem da
+blockchain; marca, modelo, ano de fabricacao, ano-modelo, placa e UF
+vigentes vem do banco (GET /api/veiculo) e aparecem no cabecalho. Decisao
+do projeto: placa e UF sao exibidas publicamente, mas nao ficam na
+blockchain; o proprietario nunca aparece na consulta publica.
+
+COMPLETAR IDENTIFICACAO (CompletarIdentificacao.jsx, na consulta privada):
+para veiculos que estao em cadeia sem identificacao no banco.
 
 CONSULTA PUBLICA (Historico.jsx)
   - "Registrado em cadeia": data do bloco, nao da observacao.
@@ -219,9 +228,15 @@ nunca saem do servidor. Servico fora do ar = 503.
   GET  marcas                  -                                       lista de marcas (base + adicionais)
   POST marcas                  login + carteira vinculada DETRAN       propoe marca ausente (fica pendente)
   PATCH marcas                 login + carteira vinculada Admin        aprova ou recusa marca proposta
-  POST privado/validar-cadastro login + carteira vinculada DETRAN      valida o cadastro antes da assinatura
+  GET  veiculo?chassi=...       -                                       identificacao PUBLICA: marca, modelo, anos,
+                                                                       placa e UF vigentes (nunca o proprietario)
+  POST veiculo                 login + carteira vinculada DETRAN       valida o cadastro antes da assinatura
   POST privado/registrar       login + carteira vinculada com papel    ver abaixo
-  POST privado/alterar         login + carteira assinando + DETRAN     nova placa, UF ou proprietario, datada
+  POST privado/alterar         login + carteira assinando + DETRAN     nova placa, UF ou proprietario, datada;
+                                                                       ou "identificacao": completa um veiculo
+                                                                       que esta em cadeia sem identificacao
+                                                                       (marca+modelo e ano-modelo conferidos
+                                                                       com o contrato)
   POST privado/consultar       login + carteira assinando + DETRAN     dados privados de um chassi
   POST upload                  login + carteira vinculada com papel    ver abaixo
   POST documento               login + carteira assinando + papel      emite link de uso unico

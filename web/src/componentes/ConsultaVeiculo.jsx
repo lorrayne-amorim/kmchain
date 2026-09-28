@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { contratoLeitura, papeisDasContas } from "../lib/blockchain";
 import { normalizarChassi, validarChassi } from "../lib/formato";
+import { carregarIdentificacao } from "../lib/identificacao";
 import Aviso from "../ui/Aviso";
 import Botao from "../ui/Botao";
 import Campo from "../ui/Campo";
@@ -25,6 +26,7 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
     const [carregando, setCarregando] = useState(Boolean(inicial));
     const [resultado, setResultado] = useState(null);
     const [entidades, setEntidades] = useState({});
+    const [identificacao, setIdentificacao] = useState(null);
     const [lendoQr, setLendoQr] = useState(false);
     const busca = useRef(0);
     const entrada = useRef(null);
@@ -36,6 +38,7 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
         setErroCampo("");
         setResultado(null);
         setEntidades({});
+        setIdentificacao(null);
 
         const problema = validarChassi(alvo);
         if (problema) {
@@ -69,6 +72,12 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
 
             // Funcao de cada entidade (DETRAN, vistoria, oficina): chega depois,
             // sem atrasar a exibicao do historico.
+            // Placa, UF, marca e anos vem do banco (nao da blockchain) e chegam
+            // depois; sem eles, o historico em cadeia aparece do mesmo jeito.
+            carregarIdentificacao(alvo)
+                .then((id) => numeroBusca === busca.current && setIdentificacao(id))
+                .catch(() => { });
+
             papeisDasContas(historico.map((l) => l.entidade))
                 .then((papeis) => numeroBusca === busca.current && setEntidades(papeis))
                 .catch(() => { });
@@ -139,7 +148,7 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
                 <Botao variante="fantasma" tamanho="p" icone="voltar" className="voltar" onClick={novaConsulta}>
                     Nova consulta
                 </Botao>
-                <Historico {...resultado} entidades={entidades} institucional={institucional} />
+                <Historico {...resultado} identificacao={identificacao} entidades={entidades} institucional={institucional} />
             </div>
         );
     }

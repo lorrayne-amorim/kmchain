@@ -1,5 +1,5 @@
 // Validacao do cadastro inicial no servidor. Usada duas vezes:
-//   1. ANTES da transacao (privado/validar-cadastro), para a pessoa nao
+//   1. ANTES da transacao (POST /api/veiculo), para a pessoa nao
 //      gravar em cadeia um veiculo cujos dados privados seriam recusados;
 //   2. DEPOIS da transacao (privado/registrar), que e a regra que vale.
 import { bd } from "./_db.js";

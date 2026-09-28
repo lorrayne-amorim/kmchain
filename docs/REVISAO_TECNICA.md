@@ -388,7 +388,7 @@ Todos rodam com `npx hardhat test` (contrato) e `npm test` (rotas), com dados fi
 | Ano de fabricação e ano-modelo (o ano-modelo é o de fabricação ou o seguinte) | `lib/veiculo.js` | teste de validação |
 | UF de registro na data do cadastro, informada (nunca pela placa), só no banco | `veiculo_ufs` | teste do cadastro completo |
 | Data e hora da observação, separada da data do bloco | `registros_privados.observada_em` | teste: as duas datas diferem e são guardadas separadas |
-| Validação no servidor ANTES da assinatura e de novo depois dela | `api/privado/validar-cadastro.js`, `api/_cadastro.js` | teste: 10 campos inválidos com mensagem por campo |
+| Validação no servidor ANTES da assinatura e de novo depois dela | `api/veiculo.js` (POST), `api/_cadastro.js` | teste: 10 campos inválidos com mensagem por campo |
 | Conferência: modelo e ano gravados em cadeia = os validados | `api/privado/registrar.js` | teste: divergência → 422 e nada gravado |
 | Placa, UF e proprietário **datados**; mudança = linha nova; histórico preservado | `veiculo_placas`, `veiculo_ufs`, `veiculo_proprietarios`, `api/privado/alterar.js` | testes: placa, UF, proprietário (alteração e transferência); data anterior à vigente recusada |
 | Consulta privada com o histórico datado e "Registrar alteração" | `ConsultaPrivada.jsx` | build; rota testada |
@@ -465,3 +465,22 @@ O texto do TCC não está no repositório nem na pasta Documentos; não o li. A 
 | "O sistema impede a fraude de odômetro" | Torna os registros de entidades identificadas rastreáveis, verificáveis e resistentes a alteração posterior; não impede leitura falsa nem adulteração fora dos registros. |
 | Cadastro com "proprietário atual" | O cadastro registra o **proprietário na data do cadastro**; mudanças posteriores entram como novas informações datadas. |
 | Contrato "otimizado" ou "definitivo" | A v1 está em uso; a v2 é proposta testada (−23% de gas por leitura), não implantada. |
+
+## 15. Identificação pública do veículo (decisão do projeto)
+
+**Decisão:** a consulta pública por chassi mostra marca, modelo, ano de fabricação, ano-modelo, placa e UF de registro **vigentes**. Esses dados vêm do banco, pela rota `GET /api/veiculo`, **e não da blockchain**. O proprietário (nome e CPF), o histórico de placas e UF e quem fez cada registro continuam **só para o DETRAN**.
+
+**Consequências:**
+- **Vantagem:** placa e UF podem ser corrigidas ou atualizadas (informação datada) sem ficar gravadas para sempre em cadeia.
+- **Risco aceito:** a placa pública ligada ao chassi e ao histórico facilita cruzar dados sobre o veículo. Ela não identifica o proprietário sozinha, mas pode ajudar a chegar nele combinada com outras fontes. Esta é uma decisão que precisa de validação jurídica antes do uso com dados reais.
+- **Dependência do servidor:** a consulta pública passa a depender do servidor para exibir esses campos. Se ele estiver fora do ar, o histórico em cadeia continua aparecendo, só sem a identificação.
+
+**Completar identificação:** um veículo que está em cadeia sem identificação no banco pode ser completado pelo DETRAN (`POST /api/privado/alterar` com `campo: "identificacao"`). O servidor lê o veículo no contrato e só aceita se "marca + modelo" e o ano-modelo forem exatamente os gravados em cadeia. Placa e UF valem a partir da data do cadastro em cadeia, e o proprietário é opcional. Isso atende veículos cadastrados antes da identificação privada existir e cadastros cujo registro privado se perdeu.
+
+**Testes:** 4 cenários:
+- a rota pública não devolve o proprietário e mostra a placa e a UF vigentes;
+- um veículo sem identificação aparece como nulo;
+- o complemento é recusado quando diverge da blockchain, aceito quando confere e recusado na segunda vez;
+- chassi fora da blockchain é recusado.
+
+Total: 60 testes das rotas.

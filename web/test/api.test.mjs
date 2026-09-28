@@ -20,7 +20,8 @@ const pendentes = (await import("../api/auth/pendentes.js")).default;
 const vincular = (await import("../api/auth/vincular-carteira.js")).default;
 const registrar = (await import("../api/privado/registrar.js")).default;
 const consultar = (await import("../api/privado/consultar.js")).default;
-const validarCadastroRota = (await import("../api/privado/validar-cadastro.js")).default;
+const veiculoRota = (await import("../api/veiculo.js")).default;
+const validarCadastroRota = veiculoRota; // POST /api/veiculo
 const alterarRota = (await import("../api/privado/alterar.js")).default;
 const marcasRota = (await import("../api/marcas.js")).default;
 const upload = (await import("../api/upload.js")).default;
@@ -558,6 +559,58 @@ describe("consulta por chassi e QR Code", () => {
         assert.equal(chassiDoLink("https://exemplo.test/?q=1"), null);
         assert.equal(chassiDoLink("texto qualquer"), null);
         assert.equal(chassiDoLink("https://kmchain-web.vercel.app/?chassi=KMCTESTE00000000O"), null);
+    });
+});
+
+// ------------------------------------------------ identificação pública e complemento
+describe("identificação pública (placa, UF, anos) e complemento", () => {
+    const publica = (chassi) => chamar(veiculoRota, { metodo: "GET", url: `/api/veiculo?chassi=${chassi}` });
+    const completar = async (quem, chassi, valores) => chamar(alterarRota, {
+        cookie: cookieDe(quem),
+        corpo: { chassi, campo: "identificacao", ...valores, ...(await assinar(quem.i, (t) => mensagemAlteracao(chassi, "identificacao", quem.email, t))) }
+    });
+
+    test("consulta pública traz placa e UF vigentes, marca e anos; nunca o proprietário", async () => {
+        const r = await publica(CHASSI.toLowerCase());
+        assert.equal(r.status, 200);
+        assert.deepEqual(Object.keys(r.corpo.veiculo).sort(), ["ano_fabricacao", "ano_modelo", "marca_nome", "modelo", "placa", "uf"]);
+        assert.equal(r.corpo.veiculo.placa, "XYZ9A99", "a placa vigente, não a do cadastro");
+        assert.equal(r.corpo.veiculo.uf, "SP");
+        assert.equal(r.corpo.veiculo.ano_fabricacao, 2020);
+        assert.doesNotMatch(JSON.stringify(r.corpo), /Ficticio Proprietario|Proprietario Ficticio|Novo Ficticio|Terceiro|cpf/i);
+    });
+
+    test("veículo sem identificação: null; chassi inválido: 400", async () => {
+        assert.equal((await publica(CHASSI_2)).corpo.veiculo, null);
+        assert.equal((await publica("ABC")).status, 400);
+    });
+
+    test("completar identificação confere marca/modelo/ano com a blockchain", async () => {
+        const chassi = "KMCTESTE000000005";
+        await (await cadeia.contrato.connect(cadeia.carteiras[1]).cadastrarVeiculo(chassi, "Honda CIVIC LXR AT", 2016, 140000, ZeroHash)).wait();
+        const base = { placa: "HND2A16", marcaId: "honda", modelo: "CIVIC LXR AT", anoFabricacao: "2015", anoModelo: "2016", uf: "MG" };
+
+        const divergente = await completar(contas.detran, chassi, { ...base, modelo: "CIVIC EXL" });
+        assert.equal(divergente.status, 422);
+        assert.equal(divergente.corpo.codigo, "dados_nao_conferem");
+        assert.match(divergente.corpo.erro, /Honda CIVIC LXR AT/);
+
+        assert.equal((await completar(contas.oficina, chassi, base)).status, 403);
+        const ok = await completar(contas.detran, chassi, base);
+        assert.equal(ok.status, 201);
+
+        const r = await publica(chassi);
+        assert.deepEqual(r.corpo.veiculo, { marca_nome: "Honda", modelo: "CIVIC LXR AT", ano_fabricacao: 2015, ano_modelo: 2016, placa: "HND2A16", uf: "MG" });
+        const origem = (await bd("SELECT origem, cadastro_tx FROM veiculos WHERE chassi = $1", [chassi])).rows[0];
+        assert.deepEqual([origem.origem, origem.cadastro_tx], ["complemento", null]);
+        assert.equal((await bd("SELECT count(*)::int AS n FROM veiculo_proprietarios WHERE chassi = $1", [chassi])).rows[0].n, 0, "proprietário é opcional");
+
+        assert.equal((await completar(contas.detran, chassi, base)).status, 409, "não completa duas vezes");
+    });
+
+    test("chassi que não está na blockchain: 404", async () => {
+        const r = await completar(contas.detran, "KMCTESTE000000009", { placa: "AAA1A11", marcaId: "fiat", modelo: "Uno", anoFabricacao: "2010", anoModelo: "2010", uf: "SP" });
+        assert.equal(r.status, 404);
     });
 });
 
