@@ -57,6 +57,11 @@ export async function iniciarBlockchain() {
     return { provedor, carteiras, contrato, abi: artefato.abi, bytecode: artefato.bytecode };
 }
 
+// Artefato compilado de um contrato (ex.: o auxiliar de teste de conta inteligente).
+export function lerArtefato(arquivoSol, nome) {
+    return JSON.parse(readFileSync(path.join(pastaContratos, "artifacts", "contracts", arquivoSol, `${nome}.json`), "utf8"));
+}
+
 export function pararBlockchain() {
     if (!no) return;
     if (process.platform === "win32") {

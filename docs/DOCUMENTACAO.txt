@@ -229,8 +229,12 @@ nunca saem do servidor. Servico fora do ar = 503.
 
 privado/registrar: o navegador so informa a transacao (txHash), o chassi e,
 quando cabe, os dados pessoais. O servidor confere na rede que a transacao
-deu certo, foi para o contrato do KmChain, saiu da carteira vinculada a
-conta e tem evento do mesmo chassi. Tipo, km, modelo e ano vem do evento.
+deu certo, que o contrato do KmChain emitiu nela exatamente um registro do
+chassi informado e que o AUTOR desse registro (a carteira que o contrato viu
+chamar) e a carteira vinculada a conta. A autoria vem do evento, e nao do
+envelope da transacao: assim funciona tambem com conta inteligente da
+MetaMask (EIP-7702), ERC-4337 ou transacao patrocinada, em que a transacao
+vai para um intermediario. Tipo, km, modelo e ano vem do evento.
 No cadastro, o servidor confere que o modelo e o ano gravados em cadeia sao
 exatamente os validados, e grava identificacao, placa, UF e proprietario
 numa unica instrucao (tudo ou nada). Leituras exigem a data da observacao

@@ -4,8 +4,9 @@
 //
 // O navegador so informa QUAL transacao acabou de confirmar e os dados
 // privados. Todo o resto e conferido aqui, na propria rede: a transacao
-// existe e deu certo, foi para o contrato do KmChain, saiu da carteira
-// vinculada a esta conta e o evento dela corresponde ao chassi informado.
+// existe e deu certo, o contrato do KmChain emitiu nela exatamente um
+// registro do chassi informado, e o autor desse registro (a carteira que o
+// contrato viu chamar) e a carteira vinculada a esta conta.
 // Tipo, quilometragem, modelo e ano vem do evento; no cadastro, o servidor
 // ainda confere que o evento tem exatamente o modelo e o ano validados.
 //
@@ -23,28 +24,51 @@ import { limparNome, problemaDaObservacao, problemasDoProprietario } from "../..
 const TIPOS = ["Cadastro", "Vistoria", "Revisão", "Transferência", "Sinistro", "Correção"];
 const ESPERA_RECIBO_MS = 8000;
 
-// Le o que a transacao realmente fez no contrato.
-function eventoDaTransacao(recibo) {
+// Le o que a transacao realmente fez NO CONTRATO DO KMCHAIN, para este
+// chassi. A autoria vem do proprio evento (entidade/autoridade = msg.sender
+// visto pelo contrato), e nao de quem enviou a transacao: com conta
+// inteligente (EIP-7702, ERC-4337) ou transacao patrocinada, o envelope sai
+// de outro endereco ou vai para um intermediario, mas o contrato registra a
+// carteira que de fato chamou.
+function eventoDaTransacao(recibo, chave) {
     const contrato = enderecoContrato();
-    let cadastro = null, leitura = null, correcao = null;
+    const eventos = [];
     for (const log of recibo.logs) {
         if (log.address.toLowerCase() !== contrato) continue;
-        let evento;
         try {
-            evento = interfaceContrato.parseLog(log);
+            const evento = interfaceContrato.parseLog(log);
+            if (evento) eventos.push(evento);
         } catch {
-            continue;
+            // log de outro formato: ignora
         }
-        if (evento?.name === "VeiculoCadastrado") cadastro = evento.args;
-        if (evento?.name === "LeituraRegistrada") leitura = evento.args;
-        if (evento?.name === "LeituraCorrigida") correcao = evento.args;
     }
-    if (cadastro && leitura) {
-        return { tipo: "Cadastro", chassiHash: cadastro.chassiHash, km: leitura.quilometragem, modelo: cadastro.modelo, ano: Number(cadastro.ano) };
+    if (eventos.length === 0) {
+        throw new ErroHttp(422, "contrato_diferente", "A transação não registrou nada no contrato do KmChain.");
     }
-    if (leitura) return { tipo: TIPOS[Number(leitura.tipo)], chassiHash: leitura.chassiHash, km: leitura.quilometragem };
-    if (correcao) return { tipo: "Correção", chassiHash: correcao.chassiHash, km: correcao.kmCorreta };
-    return null;
+
+    const doChassi = eventos.filter((e) => e.args.chassiHash === chave);
+    if (doChassi.length === 0) {
+        throw new ErroHttp(422, "chassi_nao_confere", "O chassi informado não corresponde ao da transação.");
+    }
+    const cadastros = doChassi.filter((e) => e.name === "VeiculoCadastrado");
+    const leituras = doChassi.filter((e) => e.name === "LeituraRegistrada");
+    const correcoes = doChassi.filter((e) => e.name === "LeituraCorrigida");
+
+    // Uma transacao em lote pode registrar varias coisas; o registro privado
+    // tem de corresponder a exatamente um cadastro, leitura ou correcao.
+    if (cadastros.length === 1 && leituras.length === 1 && correcoes.length === 0) {
+        const [c] = cadastros, [l] = leituras;
+        return { tipo: "Cadastro", km: l.args.quilometragem, modelo: c.args.modelo, ano: Number(c.args.ano), autor: l.args.entidade };
+    }
+    if (cadastros.length === 0 && leituras.length === 1 && correcoes.length === 0) {
+        const [l] = leituras;
+        return { tipo: TIPOS[Number(l.args.tipo)], km: l.args.quilometragem, autor: l.args.entidade };
+    }
+    if (cadastros.length === 0 && leituras.length === 0 && correcoes.length === 1) {
+        const [c] = correcoes;
+        return { tipo: "Correção", km: c.args.kmCorreta, autor: c.args.autoridade };
+    }
+    throw new ErroHttp(422, "varios_registros", "A transação tem mais de um registro deste veículo; não é possível saber a qual o registro privado se refere.");
 }
 
 async function transacaoConferida(txHash, carteira, chassi) {
@@ -57,16 +81,9 @@ async function transacaoConferida(txHash, carteira, chassi) {
         throw new ErroHttp(409, "transacao_pendente", "A transação ainda não foi confirmada na rede. Tente novamente em instantes.");
     }
     if (recibo.status !== 1) throw new ErroHttp(422, "transacao_falhou", "A transação não foi concluída na rede.");
-    if (recibo.to?.toLowerCase() !== enderecoContrato()) {
-        throw new ErroHttp(422, "contrato_diferente", "A transação não é do contrato do KmChain.");
-    }
-    if (recibo.from.toLowerCase() !== carteira) {
-        throw new ErroHttp(403, "transacao_de_outra_carteira", "A transação não foi assinada pela carteira vinculada à sua conta.");
-    }
-    const evento = eventoDaTransacao(recibo);
-    if (!evento) throw new ErroHttp(422, "sem_evento", "A transação não registrou leitura nem cadastro.");
-    if (evento.chassiHash !== chaveDoChassi(chassi)) {
-        throw new ErroHttp(422, "chassi_nao_confere", "O chassi informado não corresponde ao da transação.");
+    const evento = eventoDaTransacao(recibo, chaveDoChassi(chassi));
+    if (evento.autor.toLowerCase() !== carteira) {
+        throw new ErroHttp(403, "transacao_de_outra_carteira", "O registro não foi feito pela carteira vinculada à sua conta.");
     }
     const bloco = await naRede(rede.getBlock(recibo.blockNumber));
     return { evento, registradoEm: bloco.timestamp };

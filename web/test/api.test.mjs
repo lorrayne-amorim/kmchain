@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { Wallet, ZeroHash, id } from "ethers";
 import {
     CHAVES, chamar, configurarSegredos, cpfFicticio, iniciarBanco, iniciarBlockchain,
-    pararBlockchain, simularIpfs
+    lerArtefato, pararBlockchain, simularIpfs
 } from "./ambiente.mjs";
 
 configurarSegredos();
@@ -400,6 +400,38 @@ describe("registro privado conferido na transação", () => {
         assert.equal(ok.corpo.veiculo.modelo, "Uno Ficticio");
         assert.equal(ok.corpo.proprietarios[0].nome, "Novo Ficticio", "o vigente vem primeiro");
         assert.equal(ok.corpo.proprietarios.length, 2);
+    });
+
+    test("conta inteligente (EIP-7702/ERC-4337): autoria pelo evento, não pelo envelope da transação", async () => {
+        const { ContractFactory } = await import("ethers");
+        const artefato = lerArtefato("test/CarteiraInteligenteDeTeste.sol", "CarteiraInteligenteDeTeste");
+        const dono = cadeia.carteiras[5];
+        const carteira = await new ContractFactory(artefato.abi, artefato.bytecode, dono).deploy(await dono.getAddress());
+        await carteira.waitForDeployment();
+        const endereco = (await carteira.getAddress()).toLowerCase();
+        await (await cadeia.contrato.grantRole(id("OFICINA_ROLE"), endereco)).wait();
+        const criada = await bd(
+            "INSERT INTO usuarios (nome, email, senha_hash, carteira) VALUES ('Conta Inteligente', 'inteligente@exemplo.test', 'x', $1) RETURNING id",
+            [endereco]
+        );
+        const pessoa = { id: criada.rows[0].id, nome: "Conta Inteligente", email: "inteligente@exemplo.test" };
+        const contrato = process.env.KMCHAIN_ENDERECO;
+        const chamada = (km, tipo, atipica) => cadeia.contrato.interface.encodeFunctionData("registrarLeitura", [CHASSI, km, tipo, ZeroHash, atipica]);
+
+        // o envelope vai para a conta inteligente e sai do dono; o contrato ve a conta
+        const tx = await (await carteira.executar(contrato, chamada(20000, 1, true))).wait();
+        assert.notEqual(tx.to.toLowerCase(), contrato.toLowerCase());
+        assert.notEqual(tx.from.toLowerCase(), endereco);
+        const r = await enviar(pessoa, { txHash: tx.hash, chassi: CHASSI, observadaEm: agoraIso() });
+        assert.equal(r.status, 201);
+        const linha = (await bd("SELECT carteira, tipo_evento FROM registros_privados WHERE tx_hash = $1", [tx.hash.toLowerCase()])).rows[0];
+        assert.deepEqual([linha.carteira, linha.tipo_evento], [endereco, "Vistoria"]);
+
+        // lote com dois registros do mesmo veiculo: nao da para saber a qual se refere
+        const lote = await (await carteira.executarLote(contrato, [chamada(20100, 2, false), chamada(20200, 2, false)])).wait();
+        const r2 = await enviar(pessoa, { txHash: lote.hash, chassi: CHASSI, observadaEm: agoraIso() });
+        assert.equal(r2.status, 422);
+        assert.equal(r2.corpo.codigo, "varios_registros");
     });
 });
 
