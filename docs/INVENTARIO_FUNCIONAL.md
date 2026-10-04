@@ -94,6 +94,7 @@ Dentro de cada organização há dois papéis: **administrador** (um por organiz
 | 8 | Credenciar organização | DETRAN | `credenciarOrganizacao` | situação, id em cadeia | [I] |
 | 9 | Suspender e reativar | DETRAN | `definirSituacaoDaOrganizacao` | situação espelhada | [I] |
 | 10 | Trocar administrador | DETRAN | `definirAdministrador` | `membros`, `organizacoes` | [I] |
+| 10a | Informar ou trocar a carteira de uma conta (no cadastro da organização ou no detalhe dela) | DETRAN | `definirAdministrador`, se a organização já estiver credenciada | `usuarios.carteira`, auditoria | [I] |
 | 11 | Alterar cadastro da organização | DETRAN | — | cadastro e nome datado | [I] |
 | 12 | Vincular, desativar e reativar funcionário | Administrador | `definirFuncionario` | `membros` | [I] |
 | 13 | Consultar equipe | Administrador, DETRAN | — | `membros` | [I] |
@@ -345,7 +346,7 @@ A rota declara o que exige: tipos de organização aceitos e, quando for o caso,
 
 1. **Cadastro.** O DETRAN preenche tipo, razão social, nome fantasia, CNPJ, telefone, e-mail, CEP, logradouro, número, complemento, bairro, UF e cidade, posição no mapa (opcional) e o e-mail da conta do administrador. O servidor valida (inclusive dígitos do CNPJ e o município na lista do IBGE) e grava como **pendente**.
 2. **Credenciamento.** O DETRAN assina `credenciarOrganizacao`. O servidor confere a transação, lê o id atribuído e o administrador gravados, e marca a organização como **ativa**.
-3. **Administrador.** Precisa ter conta e carteira vinculada, e não estar ativo em outra organização. A troca é assinada pelo DETRAN e espelhada no banco; o anterior vira funcionário.
+3. **Administrador.** Precisa ter conta e carteira, e não estar ativo em outra organização. A carteira pode ser vinculada pela própria pessoa, com assinatura, ou informada pelo DETRAN no cadastro da organização ou no detalhe dela ("Informar carteira" / "Trocar carteira"). Se a organização já estiver credenciada, a troca da carteira é seguida da assinatura de `definirAdministrador` para a carteira nova; a anterior continua vinculada à organização no contrato, como funcionário. A troca é assinada pelo DETRAN e espelhada no banco; o anterior vira funcionário.
 4. **Funcionários.** O administrador informa o e-mail de uma conta já criada, assina `definirFuncionario` e o servidor espelha. Desativar não apaga: o vínculo fica com data de desativação.
 5. **Situação.** `pendente`, `ativa`, `suspensa`. Suspender e reativar são transações do DETRAN. A organização suspensa não registra; o que ela já registrou permanece.
 6. **Alteração cadastral.** Só o DETRAN. Tipo e CNPJ não mudam. Mudança de nome gera linha em `organizacao_nomes`, e a consulta pública mostra o nome da época do evento.
@@ -552,8 +553,9 @@ Todos sob `/api`. "Membro" = sessão + carteira vinculada + vínculo ativo em or
 | POST `auth/vincular-carteira` | vincular carteira | sessão | carteira, assinatura | ok |
 | POST `auth/pendentes` | listar contas | DETRAN + assinatura | assinatura | contas |
 | POST `contas/localizar` | achar conta por e-mail | DETRAN ou administrador | email | nome, email, carteira |
+| POST `contas/carteira` | informar ou trocar a carteira de uma conta | DETRAN | email, carteira | nome, email, carteira |
 | GET `organizacoes` | lista pública | — | — | nome, tipo, endereço, coordenadas, situação, nomes datados |
-| POST `organizacoes` | cadastrar | DETRAN | cadastro + e-mail do administrador | organização e dados para assinar |
+| POST `organizacoes` | cadastrar | DETRAN | cadastro + e-mail do administrador e, opcionalmente, a carteira dele | organização e dados para assinar |
 | PATCH `organizacoes` | alterar cadastro | DETRAN | id + cadastro | organização |
 | GET `organizacoes/gestao` | lista completa | DETRAN | — | organizações |
 | POST `organizacoes/credenciamento` | confirmar credenciamento | DETRAN | id, txHash | organização |
@@ -618,6 +620,7 @@ Todos sob `/api`. "Membro" = sessão + carteira vinculada + vínculo ativo em or
 | Cadastrar e credenciar organização | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Suspender e reativar organização | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Trocar administrador | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Informar ou trocar a carteira de outra conta | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Vincular e desativar funcionário da própria organização | A | A | A | A | ✗ |
 | Ver equipe da própria organização | A | A | A | A | ✗ |
 | Ver equipe de outra organização | ✓ | ✗ | ✗ | ✗ | ✗ |
@@ -705,6 +708,7 @@ O DETRAN não abre solicitação porque corrige de ofício.
 - a organização do evento é a do vínculo de quem assina; a pessoa por trás da carteira não é verificada;
 - o banco é um espelho: uma alteração direta no banco mudaria nomes e complementos, não os eventos em cadeia;
 - se a tela fechar entre a transação e o envio ao servidor, o evento fica em cadeia sem complemento; a tela oferece reenvio, mas não há reconciliação automática;
+- a carteira informada pelo DETRAN para uma conta não é provada por assinatura da pessoa: é um atestado do DETRAN, registrado na auditoria. Nas rotas que não pedem assinatura na hora, a conta passa a agir pelo vínculo dessa carteira;
 - sem limite de tentativas de login e sem revogação de sessão;
 - listas de equipe, registros, auditoria e gestão não pedem assinatura na hora;
 - a lista pública expõe o endereço das organizações;
@@ -764,7 +768,7 @@ O DETRAN não abre solicitação porque corrige de ofício.
 | Build do backend | não há etapa de build (funções Node) |
 | Cenário de demonstração (`npm run demo:preparar`) | criado por completo no ambiente local e na Sepolia: 3 organizações, 8 contas, 4 veículos, 15 eventos; banco e contrato conferidos |
 | Testes do contrato (`npx hardhat test`) | 49 passando (25 do contrato atual; 24 da v1, mantidos como histórico) |
-| Testes das rotas (`npm test`) | 95 passando (11 da verificação de localização) |
+| Testes das rotas (`npm test`) | 98 passando (11 da verificação de localização, 3 da carteira informada pelo DETRAN) |
 | Lint (`npx oxlint`) | sem apontamentos |
 | TypeScript | não se aplica |
 | Erros conhecidos | nenhum nos testes; telas ainda não exercitadas em navegador com MetaMask |
@@ -800,7 +804,7 @@ Definido em `web/demo/cenario.mjs` e criado por `npm run demo:preparar`. Todos o
 | Vistoria KM Teste | VISTORIA | Vitória - ES | Gerente da Vistoria KM Teste | Vistoriador da Vistoria KM Teste |
 | Seguradora KM Teste | SEGURADORA | Vila Velha - ES | Gerente da Seguradora KM Teste | Analista da Seguradora KM Teste |
 
-As oito contas usam e-mails `@demo.kmchain.test` e a senha de `DEMO_SENHA`. Cada conta tem uma carteira: no ambiente local, as contas de teste do Hardhat; na Sepolia, as de `web/demo/carteiras.local`, criadas por `npm run demo:carteiras` (a do administrador do DETRAN é a que implanta o contrato).
+As oito contas usam e-mails do domínio definido em `web/demo/cenario.mjs` e a senha de `DEMO_SENHA`. As contas criadas na Sepolia em 04/10/2026 usam `@demo.kmchain.test`; o domínio do arquivo foi alterado depois para `@exemplo.com` e vale para as próximas criações. Cada conta tem uma carteira: no ambiente local, as contas de teste do Hardhat; na Sepolia, as de `web/demo/carteiras.local`, criadas por `npm run demo:carteiras` (a do administrador do DETRAN é a que implanta o contrato).
 
 ### Veículos
 
@@ -842,4 +846,4 @@ A primeira versão do contrato permanece no repositório como registro da evolu�
 
 O protótipo assegura a integridade e a ordem dos registros após sua inserção e a identificação da organização e da carteira responsáveis. Não assegura a veracidade da quilometragem, da data ou do local informados, tampouco a presença física no local, nem a identidade da pessoa que controla a carteira. A confiabilidade da entrada depende do credenciamento, do vínculo institucional, das permissões por tipo de organização, da verificação de localização, das evidências anexadas e da análise do DETRAN nas correções. O uso do nome DETRAN é ilustrativo e não indica vínculo com órgão público.
 
-A verificação automatizada compreende 49 testes do contrato e 95 testes de integração das rotas do servidor, executados em rede local. O contrato está implantado na rede de testes Sepolia; os fluxos de interface ainda não foram exercitados em navegador.
+A verificação automatizada compreende 49 testes do contrato e 98 testes de integração das rotas do servidor, executados em rede local. O contrato está implantado na rede de testes Sepolia; os fluxos de interface ainda não foram exercitados em navegador.

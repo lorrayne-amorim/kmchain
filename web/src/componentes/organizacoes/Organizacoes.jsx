@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { mensagemDeErro } from "../../lib/erros";
 import { rotuloDaOrganizacao } from "../../lib/eventos";
+import { carteiraValida, encurtar } from "../../lib/formato";
 import { SITUACOES, enderecoEmLinha, formatarCnpj } from "../../lib/organizacao";
 import {
-    credenciarOrganizacao, definirSituacaoDaOrganizacao, listarOrganizacoesParaGestao, localizarConta, trocarAdministrador
+    credenciarOrganizacao, definirCarteiraDaConta, definirSituacaoDaOrganizacao, listarOrganizacoesParaGestao, localizarConta, trocarAdministrador
 } from "../../lib/organizacoes";
 import { avisar } from "../../lib/toast";
 import { useMunicipios } from "../../lib/useMunicipios";
@@ -133,7 +134,31 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
     const [trocando, setTrocando] = useState(false);
     const [email, setEmail] = useState("");
     const [erroEmail, setErroEmail] = useState("");
+    const [editandoCarteira, setEditandoCarteira] = useState(false);
+    const [carteira, setCarteira] = useState("");
+    const [erroCarteira, setErroCarteira] = useState("");
     const municipios = useMunicipios();
+
+    // Grava a carteira do administrador. Se a organizacao ja esta
+    // credenciada, o vinculo no contrato e refeito para a carteira nova.
+    async function salvarCarteira(e) {
+        e.preventDefault();
+        setErroCarteira("");
+        const nova = carteira.trim();
+        if (!carteiraValida(nova)) return setErroCarteira("Informe o endereço com 0x e 40 caracteres.");
+        try {
+            await definirCarteiraDaConta(o.administrador_email, nova);
+        } catch (erro) {
+            return setErroCarteira(mensagemDeErro(erro, "Não foi possível gravar a carteira."));
+        }
+        setEditandoCarteira(false);
+        setCarteira("");
+        if (o.id_cadeia === null) {
+            avisar("Carteira do administrador gravada.");
+            return aoAtualizar();
+        }
+        await executar(() => trocarAdministrador(o, nova, setPasso), "Carteira do administrador atualizada no contrato.");
+    }
 
     // Assina no contrato e recarrega o cadastro espelhado pelo servidor.
     async function executar(operacao, mensagem) {
@@ -180,18 +205,44 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
                     <div><dt>CNPJ</dt><dd className="numero">{formatarCnpj(o.cnpj)}</dd></div>
                     <div><dt>Contato</dt><dd>{o.telefone} · {o.email}</dd></div>
                     <div><dt>Endereço</dt><dd>{enderecoEmLinha(o)}<span className="celula-secundaria">{local} · CEP {o.cep}</span></dd></div>
-                    <div><dt>Administrador</dt><dd>{o.administrador_nome ?? "—"}<span className="celula-secundaria">{o.administrador_email}</span></dd></div>
+                    <div>
+                        <dt>Administrador</dt>
+                        <dd>
+                            {o.administrador_nome ?? "—"}
+                            <span className="celula-secundaria">{o.administrador_email}</span>
+                            <span className="celula-secundaria mono">{o.administrador_carteira ? encurtar(o.administrador_carteira, 8, 6) : "sem carteira"}</span>
+                            {o.administrador_email && !editandoCarteira && (
+                                <Botao variante="fantasma" tamanho="p" onClick={() => setEditandoCarteira(true)}>
+                                    {o.administrador_carteira ? "Trocar carteira" : "Informar carteira"}
+                                </Botao>
+                            )}
+                        </dd>
+                    </div>
                     <div>
                         <dt>Identificador em cadeia</dt>
                         <dd>{o.id_cadeia ?? "Ainda não credenciada"}{o.credenciada_em && <span className="celula-secundaria">credenciada em {new Date(o.credenciada_em).toLocaleDateString("pt-BR")}</span>}</dd>
                     </div>
                 </dl>
 
+                {editandoCarteira && !passo && (
+                    <form className="busca-linha" onSubmit={salvarCarteira} noValidate>
+                        <Campo rotulo="Carteira do administrador" erro={erroCarteira}
+                            ajuda={erroCarteira ? undefined : (o.id_cadeia === null
+                                ? "O credenciamento será assinado para esta carteira."
+                                : "Você assina em seguida a troca no contrato. A carteira anterior continua vinculada à organização, como funcionário.")}>
+                            <input className="mono" value={carteira} placeholder="0x…" autoComplete="off" spellCheck={false}
+                                onChange={(e) => setCarteira(e.target.value)} />
+                        </Campo>
+                        <Botao type="submit">Gravar carteira</Botao>
+                        <Botao variante="fantasma" onClick={() => setEditandoCarteira(false)}>Cancelar</Botao>
+                    </form>
+                )}
+
                 {o.situacao === "pendente" && (
                     <Aviso tipo="info" titulo="Credenciamento pendente">
                         {o.credenciamento
                             ? "O cadastro está salvo. Assine o credenciamento para a organização passar a registrar eventos."
-                            : "O administrador indicado não tem mais carteira vinculada. Peça para vincular a carteira à conta."}
+                            : "O administrador indicado está sem carteira. Informe a carteira dele acima, ou peça para ele vinculá-la à conta."}
                     </Aviso>
                 )}
                 {falha && <Aviso tipo="erro">{falha}</Aviso>}

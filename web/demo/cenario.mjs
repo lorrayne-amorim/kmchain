@@ -18,18 +18,18 @@ export const TIPO = {
     VISTORIA_TRANSFERENCIA: 20, VISTORIA_CAUTELAR: 24, VISTORIA_SEGURADORA: 25, SEGURO_VISTORIA_PREVIA: 30
 };
 
-const DOMINIO = "demo.kmchain.test";
+const DOMINIO = "exemplo.com";
 
 // conta (demo/carteiras.mjs) -> pessoa ficticia
 export const CONTAS = {
-    "detran.admin":           { nome: "Administração DETRAN (demonstração)", email: `detran.admin@${DOMINIO}` },
-    "detran.funcionario":     { nome: "Agente DETRAN (demonstração)",        email: `detran.agente@${DOMINIO}` },
-    "oficina.admin":          { nome: "Gerente da Oficina KM Teste",         email: `oficina.admin@${DOMINIO}` },
-    "oficina.funcionario":    { nome: "Mecânico da Oficina KM Teste",        email: `oficina.mecanico@${DOMINIO}` },
-    "vistoria.admin":         { nome: "Gerente da Vistoria KM Teste",        email: `vistoria.admin@${DOMINIO}` },
-    "vistoria.funcionario":   { nome: "Vistoriador da Vistoria KM Teste",    email: `vistoria.vistoriador@${DOMINIO}` },
-    "seguradora.admin":       { nome: "Gerente da Seguradora KM Teste",      email: `seguradora.admin@${DOMINIO}` },
-    "seguradora.funcionario": { nome: "Analista da Seguradora KM Teste",     email: `seguradora.analista@${DOMINIO}` }
+    "detran.admin": { nome: "Administração DETRAN (demonstração)", email: `detran.admin@${DOMINIO}` },
+    "detran.funcionario": { nome: "Agente DETRAN (demonstração)", email: `detran.agente@${DOMINIO}` },
+    "oficina.admin": { nome: "Gerente da Oficina KM Teste", email: `oficina.admin@${DOMINIO}` },
+    "oficina.funcionario": { nome: "Mecânico da Oficina KM Teste", email: `oficina.mecanico@${DOMINIO}` },
+    "vistoria.admin": { nome: "Gerente da Vistoria KM Teste", email: `vistoria.admin@${DOMINIO}` },
+    "vistoria.funcionario": { nome: "Vistoriador da Vistoria KM Teste", email: `vistoria.vistoriador@${DOMINIO}` },
+    "seguradora.admin": { nome: "Gerente da Seguradora KM Teste", email: `seguradora.admin@${DOMINIO}` },
+    "seguradora.funcionario": { nome: "Analista da Seguradora KM Teste", email: `seguradora.analista@${DOMINIO}` }
 };
 
 // O CNPJ leva os digitos verificadores calculados pelo script a partir da

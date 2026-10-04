@@ -407,6 +407,55 @@ describe("organizações: cadastro e credenciamento pelo DETRAN", () => {
         await (await como(8).definirFuncionario(contas.semVinculo.carteira, false)).wait();
         await pedir("organizacoes/sincronizar", contas.detran, { id: o.id });
     });
+
+    test("DETRAN informa a carteira de uma conta: só ele, sem repetir carteira, com auditoria", async () => {
+        const nova = Wallet.createRandom().address;
+        const definir = (quem, email, carteira) => pedir("contas/carteira", quem, { email, carteira });
+
+        assert.equal((await definir(contas.oficina, contas.semCarteira.email, nova)).status, 403);
+        assert.equal((await definir(null, contas.semCarteira.email, nova)).status, 401);
+        assert.equal((await definir(contas.detran, contas.semCarteira.email, "0x123")).corpo.codigo, "carteira_invalida");
+        assert.equal((await definir(contas.detran, "ninguem@exemplo.test", nova)).status, 404);
+        assert.equal((await definir(contas.detran, contas.semCarteira.email, contas.vistoria.carteira)).corpo.codigo, "carteira_em_uso");
+        assert.equal((await definir(contas.detran, contas.detran.email, nova)).corpo.codigo, "propria_conta");
+
+        const r = await definir(contas.detran, contas.semCarteira.email, nova);
+        assert.equal(r.status, 200);
+        assert.equal(r.corpo.conta.carteira, nova.toLowerCase());
+        assert.equal((await bd("SELECT carteira FROM usuarios WHERE id = $1", [contas.semCarteira.id])).rows[0].carteira, nova.toLowerCase());
+        assert.ok((await acoesDaAuditoria()).includes("carteira_definida"));
+        // informar a carteira nao da acesso: o vinculo com a organizacao continua dependendo do contrato
+        assert.equal((await obter("eventos", contas.semCarteira)).corpo.codigo, "sem_vinculo");
+        await bd("UPDATE usuarios SET carteira = NULL WHERE id = $1", [contas.semCarteira.id]);
+    });
+
+    test("cadastro da organização com a carteira do administrador informada pelo DETRAN", async () => {
+        const carteira = Wallet.createRandom().address;
+        const dados = { ...dadosDaOrganizacao("VISTORIA", "Vistoria Com Carteira", contas.semCarteira, "889990000001"), administradorCarteira: carteira };
+        assert.equal((await pedir("organizacoes", contas.admin, { ...dados, administradorCarteira: "abc" })).corpo.codigo, "carteira_invalida");
+
+        const r = await pedir("organizacoes", contas.admin, dados);
+        assert.equal(r.status, 201, JSON.stringify(r.corpo));
+        assert.equal(r.corpo.credenciamento.administrador, carteira.toLowerCase(), "o credenciamento é assinado para a carteira informada");
+        const pendente = (await obter("organizacoes/gestao", contas.detran)).corpo.organizacoes.find((o) => o.nome_fantasia === "Vistoria Com Carteira");
+        assert.equal(pendente.administrador_carteira, carteira.toLowerCase());
+        await bd("UPDATE usuarios SET carteira = NULL WHERE id = $1", [contas.semCarteira.id]);
+    });
+
+    test("troca da carteira do administrador de organização credenciada: contrato e equipe acompanham", async () => {
+        const o = (await bd("SELECT id, id_cadeia FROM organizacoes WHERE nome_fantasia = 'Oficina Suspensa'")).rows[0];
+        const nova = Wallet.createRandom().address;
+        assert.equal((await pedir("contas/carteira", contas.detran, { email: contas.suspensa.email, carteira: nova })).status, 200);
+        // ate o DETRAN assinar a troca, a conta fica sem vinculo ativo no contrato
+        assert.equal((await obter("eventos", contas.suspensa)).corpo.codigo, "sem_vinculo");
+
+        await (await como(1).definirAdministrador(o.id_cadeia, nova)).wait();
+        const r = await pedir("organizacoes/sincronizar", contas.detran, { id: o.id });
+        assert.equal(r.corpo.organizacao.administrador_id, contas.suspensa.id);
+        const membro = (await bd("SELECT carteira, papel, ativo FROM membros WHERE organizacao_id = $1 AND usuario_id = $2", [o.id, contas.suspensa.id])).rows[0];
+        assert.deepEqual([membro.carteira, membro.papel, membro.ativo], [nova.toLowerCase(), "administrador", true]);
+        assert.equal((await obter("eventos", contas.suspensa)).status, 200);
+    });
 });
 
 // ---------------------------------------------------------- funcionarios

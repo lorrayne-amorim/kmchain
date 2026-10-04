@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useState } from "react";
 import { mensagemDeErro } from "../../lib/erros";
 import { ORGANIZACOES_CREDENCIAVEIS } from "../../lib/eventos";
 import { focarPrimeiroErro } from "../../lib/foco";
+import { carteiraValida } from "../../lib/formato";
 import { buscarCep, localizarEndereco } from "../../lib/geocodificacao";
 import { COR_DO_TIPO, coordenadasValidas, problemasDaOrganizacao } from "../../lib/organizacao";
 import { atualizarOrganizacao, cadastrarOrganizacao } from "../../lib/organizacoes";
@@ -15,7 +16,7 @@ const Mapa = lazy(() => import("../../ui/Mapa"));
 
 const VAZIO = {
     tipo: "OFICINA", razaoSocial: "", nomeFantasia: "", cnpj: "", telefone: "", email: "", cep: "", logradouro: "",
-    numero: "", complemento: "", bairro: "", municipio: "", latitude: "", longitude: "", administradorEmail: ""
+    numero: "", complemento: "", bairro: "", municipio: "", latitude: "", longitude: "", administradorEmail: "", administradorCarteira: ""
 };
 
 const doCadastro = (o) => ({
@@ -78,12 +79,14 @@ export default function FormularioOrganizacao({ organizacao, aoSalvar, aoCancela
         setFalha("");
         const novos = problemasDaOrganizacao(dados);
         if (!editando && !dados.administradorEmail.trim()) novos.email_administrador = "Informe o e-mail da conta do administrador.";
+        if (dados.administradorCarteira && !carteiraValida(dados.administradorCarteira.trim())) novos.carteira = "Informe o endereço com 0x e 40 caracteres.";
         setErros(novos);
         if (Object.keys(novos).length > 0) return focarPrimeiroErro();
 
         setEnviando(true);
         try {
-            const r = editando ? await atualizarOrganizacao(organizacao.id, dados) : await cadastrarOrganizacao(dados);
+            const envio = { ...dados, administradorCarteira: dados.administradorCarteira.trim() };
+            const r = editando ? await atualizarOrganizacao(organizacao.id, envio) : await cadastrarOrganizacao(envio);
             aoSalvar(r);
         } catch (erro) {
             if (erro.dados?.campos) {
@@ -181,8 +184,13 @@ export default function FormularioOrganizacao({ organizacao, aoSalvar, aoCancela
                 <fieldset className="grupo">
                     <legend className="grupo-titulo"><span className="grupo-numero">3</span>Administrador responsável</legend>
                     <Campo rotulo="E-mail da conta do administrador" erro={erros.email_administrador}
-                        ajuda={erros.email_administrador ? undefined : "A pessoa precisa ter criado a conta no acesso institucional e vinculado a carteira."}>
+                        ajuda={erros.email_administrador ? undefined : "A pessoa precisa ter criado a conta no acesso institucional."}>
                         <input type="email" value={dados.administradorEmail} onChange={(e) => alterar("administradorEmail", e.target.value)} />
+                    </Campo>
+                    <Campo rotulo="Carteira do administrador" opcional erro={erros.carteira}
+                        ajuda={erros.carteira ? undefined : "Preencha se a conta ainda não vinculou a carteira, ou para trocar a que está vinculada. É com ela que o credenciamento será assinado."}>
+                        <input className="mono" value={dados.administradorCarteira} placeholder="0x…" autoComplete="off" spellCheck={false}
+                            onChange={(e) => alterar("administradorCarteira", e.target.value)} />
                     </Campo>
                 </fieldset>
             )}

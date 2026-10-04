@@ -9,6 +9,11 @@ export const buscarContaPorEmail = async (email) =>
 export const buscarContaPorCarteira = async (carteira) =>
     primeira(await bd("SELECT id, nome, email, carteira FROM usuarios WHERE lower(carteira) = lower($1)", [carteira]));
 
+// Grava a carteira de uma conta. O indice unico recusa (23505) a carteira
+// que ja pertence a outra conta.
+export const definirCarteira = (usuarioId, carteira) =>
+    bd("UPDATE usuarios SET carteira = $2, carteira_vinculada_em = now() WHERE id = $1", [usuarioId, carteira.toLowerCase()]);
+
 export const buscarMembro = async (organizacaoId, usuarioId) =>
     primeira(await bd("SELECT * FROM membros WHERE organizacao_id = $1 AND usuario_id = $2", [organizacaoId, usuarioId]));
 

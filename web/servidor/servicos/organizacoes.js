@@ -8,7 +8,7 @@
 import { contrato, naRede, transacaoConfirmada } from "../nucleo/cadeia.js";
 import { ErroHttp } from "../nucleo/http.js";
 import * as organizacoes from "../repositorios/organizacoes.js";
-import { buscarContaPorCarteira, buscarContaPorEmail, buscarMembro, salvarMembro } from "../repositorios/membros.js";
+import { buscarContaPorCarteira, buscarContaPorEmail, buscarMembro, definirCarteira, salvarMembro } from "../repositorios/membros.js";
 import { ACOES, registrarAuditoria } from "./auditoria.js";
 import { vinculoDaCarteira } from "./autorizacao.js";
 import { organizacaoPorChave } from "../../src/lib/eventos.js";
@@ -46,6 +46,40 @@ function validarDadosDaOrganizacao(corpo) {
     };
 }
 
+// O DETRAN informa a carteira de uma conta, quando a pessoa ainda nao a
+// vinculou ou quando a carteira mudou. E um atestado do DETRAN: a posse da
+// carteira nao e provada por assinatura, como no vinculo feito pela propria
+// pessoa, e por isso a acao fica na auditoria. Para valer no contrato, o
+// vinculo com a organizacao ainda precisa ser assinado (credenciamento,
+// troca de administrador ou vinculo de funcionario).
+export async function definirCarteiraDaConta(email, carteira, acesso) {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(carteira ?? "")) {
+        throw new ErroHttp(400, "carteira_invalida", "Endereço de carteira inválido.", { campos: { carteira: "Informe o endereço com 0x e 40 caracteres." } });
+    }
+    const conta = await buscarContaPorEmail(String(email ?? "").trim().toLowerCase());
+    if (!conta) {
+        throw new ErroHttp(404, "conta_nao_encontrada", "Não há conta com este e-mail. A pessoa precisa criar a conta no acesso institucional.", { campos: { email: "Conta não encontrada." } });
+    }
+    if (conta.id === acesso.usuario.id) {
+        throw new ErroHttp(400, "propria_conta", "A carteira da sua própria conta é trocada pelo vínculo de carteira, com assinatura.");
+    }
+    const emUso = new ErroHttp(409, "carteira_em_uso", "Esta carteira já pertence a outra conta.", { campos: { carteira: "Carteira já vinculada a outra conta." } });
+    const dona = await buscarContaPorCarteira(carteira);
+    if (dona && dona.id !== conta.id) throw emUso;
+    if (dona) return dona;
+
+    try {
+        await definirCarteira(conta.id, carteira);
+    } catch (erro) {
+        if (erro?.code === "23505") throw emUso;
+        throw erro;
+    }
+    await registrarAuditoria(ACOES.CARTEIRA_DEFINIDA, acesso, { tipo: "usuario", id: conta.id }, {
+        funcionario: conta.nome, organizacao: conta.carteira ? "carteira trocada" : "carteira informada"
+    });
+    return { ...conta, carteira: carteira.toLowerCase() };
+}
+
 // Conta indicada para administrar uma organizacao: precisa existir, ter
 // carteira vinculada e nao estar ativa em outra organizacao.
 export async function localizarContaParaVinculo(email, organizacaoIdCadeia = null) {
@@ -70,6 +104,8 @@ export async function cadastrarOrganizacao(corpo, acesso) {
     if (await organizacoes.buscarOrganizacaoPorCnpj(dados.cnpj)) {
         throw new ErroHttp(409, "cnpj_ja_cadastrado", "Já existe uma organização com este CNPJ.", { campos: { cnpj: "CNPJ já cadastrado." } });
     }
+    // A carteira do administrador pode vir junto, informada pelo DETRAN.
+    if (corpo.administradorCarteira) await definirCarteiraDaConta(corpo.administradorEmail, corpo.administradorCarteira, acesso);
     const { conta } = await localizarContaParaVinculo(corpo.administradorEmail);
 
     const organizacao = await organizacoes.inserirOrganizacao({ ...dados, administradorId: conta.id }, acesso.usuario.id);
@@ -138,6 +174,13 @@ export async function sincronizarOrganizacaoComContrato(id, acesso) {
     }
 
     const administrador = await buscarContaPorCarteira(emCadeia.administrador);
+    if (administrador && administrador.id === organizacao.administrador_id) {
+        // Mesma pessoa: so a carteira dela pode ter mudado.
+        await salvarMembro({
+            organizacaoId: organizacao.id, usuarioId: administrador.id, carteira: administrador.carteira,
+            papel: "administrador", ativo: true
+        });
+    }
     if (administrador && administrador.id !== organizacao.administrador_id) {
         // O administrador anterior continua vinculado, como funcionario.
         if (organizacao.administrador_id) {

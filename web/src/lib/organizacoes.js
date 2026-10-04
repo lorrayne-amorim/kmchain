@@ -54,6 +54,12 @@ export async function trocarAdministrador(organizacao, carteira, aoMudarPasso = 
     return sincronizarOrganizacao(organizacao.id);
 }
 
+// O DETRAN informa ou troca a carteira de uma conta (sem assinatura da pessoa).
+export async function definirCarteiraDaConta(email, carteira) {
+    const { conta } = await chamarApi("contas/carteira", { corpo: { email, carteira }, padrao: "Não foi possível gravar a carteira." });
+    return conta;
+}
+
 // Acha a conta de um e-mail para vincula-la a uma organizacao.
 export async function localizarConta(email, organizacaoId) {
     const { conta } = await chamarApi("contas/localizar", { corpo: { email, organizacaoId }, padrao: "Não foi possível localizar a conta." });

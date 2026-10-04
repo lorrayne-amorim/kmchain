@@ -21,6 +21,7 @@ export const ROTAS = {
     "auth/vincular-carteira": { POST: auth.vincularCarteira },
     "auth/pendentes": { POST: organizacoes.listarContas },
     "contas/localizar": { POST: organizacoes.localizarConta },
+    "contas/carteira": { POST: organizacoes.definirCarteira },
 
     "organizacoes": { GET: organizacoes.listarPublicas, POST: organizacoes.cadastrar, PATCH: organizacoes.atualizar },
     "organizacoes/gestao": { GET: organizacoes.listarParaGestao },

@@ -71,6 +71,13 @@ export async function localizarConta(req, res) {
     res.status(200).json({ conta: { nome: conta.nome, email: conta.email, carteira: conta.carteira } });
 }
 
+// POST /api/contas/carteira: o DETRAN informa ou troca a carteira de uma conta.
+export async function definirCarteira(req, res) {
+    const acesso = await exigirMembro(req, { tipos: SO_DETRAN });
+    const conta = await servico.definirCarteiraDaConta(req.body?.email, req.body?.carteira, acesso);
+    res.status(200).json({ conta: { nome: conta.nome, email: conta.email, carteira: conta.carteira } });
+}
+
 // GET /api/funcionarios[?organizacao=id]: equipe da organizacao.
 export async function listarEquipe(req, res) {
     const acesso = await exigirMembro(req);
