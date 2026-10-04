@@ -541,6 +541,26 @@ describe("organizações: cadastro e credenciamento pelo DETRAN", () => {
         await (await como(4).definirFuncionario(pessoa.address, false)).wait();
         await pedir("funcionarios/sincronizar", contas.vistoria, { carteira: pessoa.address });
     });
+
+    test("o DETRAN também pode ter mais de um administrador", async () => {
+        const detran = (await bd("SELECT id FROM organizacoes WHERE id_cadeia = 1")).rows[0];
+        const papelDoAgente = async () => (await bd("SELECT papel FROM membros WHERE organizacao_id = $1 AND usuario_id = $2", [detran.id, contas.detran.id])).rows[0].papel;
+        const equipe = (quem) => obter("funcionarios", quem);
+
+        // o agente ainda nao administra
+        assert.equal((await obter("auth/eu", contas.detran)).corpo.vinculo.administrador, false);
+        await (await como(0).definirAdministrador(1, contas.detran.carteira, true)).wait();
+        assert.equal((await pedir("funcionarios/sincronizar", contas.admin, { carteira: contas.detran.carteira })).corpo.funcionario.papel, "administrador");
+        assert.equal(await papelDoAgente(), "administrador");
+        assert.equal((await obter("auth/eu", contas.detran)).corpo.vinculo.administrador, true);
+        const administradores = (await equipe(contas.detran)).corpo.funcionarios.filter((f) => f.papel === "administrador").map((f) => f.email).sort();
+        assert.deepEqual(administradores, ["admin@exemplo.test", "detran@exemplo.test"]);
+
+        // volta a ser agente, para os demais testes
+        await (await como(0).definirAdministrador(1, contas.detran.carteira, false)).wait();
+        await pedir("funcionarios/sincronizar", contas.admin, { carteira: contas.detran.carteira });
+        assert.equal(await papelDoAgente(), "funcionario");
+    });
 });
 
 // ---------------------------------------------------------- funcionarios

@@ -61,7 +61,7 @@ Dentro de cada organização há dois papéis: **administrador** (um ou mais por
 
 - **Finalidade:** autoridade administrativa do protótipo.
 - **Pode:** cadastrar, credenciar, suspender e reativar organizações; definir e retirar administradores de qualquer organização; informar ou trocar a carteira de uma conta; alterar dados cadastrais; ver a equipe de qualquer organização; cadastrar veículos; registrar os eventos institucionais próprios; corrigir de ofício; aprovar e rejeitar solicitações de correção; consultar e alterar os dados complementares do veículo; abrir qualquer comprovante; propor marcas; ver todos os registros, a lista de contas e a auditoria.
-- **Só o administrador do DETRAN:** vincular e desativar funcionários do DETRAN; aprovar ou recusar marcas propostas.
+- **Só o administrador do DETRAN:** vincular e desativar funcionários do DETRAN; definir e retirar outros administradores do DETRAN pela tela Equipe; aprovar ou recusar marcas propostas. O DETRAN também pode ter mais de um administrador.
 - **Não pode:** registrar eventos de oficina, vistoria ou seguradora; abrir solicitação de correção; ser suspenso.
 - **Telas:** Início, Consultar, Novo registro, Cadastrar veículo, Correções, Registros, Organizações, Dados complementares, Auditoria; Equipe (só o administrador).
 
@@ -148,7 +148,7 @@ Navegação por hash. Não há roteador.
 | Cadastrar veículo | `…/cadastro` | DETRAN | `CadastroVeiculo`, `SeletorMarca` | cadastrar |
 | Correções | `…/correcoes` | Vínculo ativo | `Correcoes`, `SolicitarCorrecao`, `AnaliseCorrecao`, `CorrigirLeitura` | solicitar; analisar; corrigir de ofício |
 | Registros | `…/registros` | Vínculo ativo | `RegistrosDaOrganizacao` | listar, abrir histórico, abrir transação, ver a situação da localização; o DETRAN filtra e abre os detalhes da localização |
-| Equipe | `…/equipe` | Administrador | `Equipe` | vincular, desativar, reativar |
+| Equipe | `…/equipe` | Administrador | `Equipe`; no DETRAN, também `Administradores` | vincular, desativar, reativar; no DETRAN, definir e retirar os administradores do próprio DETRAN |
 | Organizações | `…/organizacoes` | DETRAN | `Organizacoes`, `FormularioOrganizacao`, `Administradores`, `Equipe`, `MapaOrganizacoes` | cadastrar, credenciar, suspender, reativar, definir e retirar administradores, trocar a carteira de um administrador, editar |
 | Dados complementares | `…/complementares` | DETRAN | `DadosComplementares`, `CompletarIdentificacao` | consultar, alterar, completar |
 | Auditoria | `…/auditoria` | DETRAN | `Auditoria`, `MarcasPropostas` | filtrar; revisar marcas (administrador) |
@@ -773,7 +773,7 @@ O DETRAN não abre solicitação porque corrige de ofício.
 | Build do backend | não há etapa de build (funções Node) |
 | Cenário de demonstração (`npm run demo:preparar`) | criado por completo no ambiente local e na Sepolia: 3 organizações, 8 contas, 4 veículos, 15 eventos; banco e contrato conferidos |
 | Testes do contrato (`npx hardhat test`) | 50 passando (26 do contrato atual; 24 da v1, mantidos como histórico) |
-| Testes das rotas (`npm test`) | 100 passando |
+| Testes das rotas (`npm test`) | 101 passando |
 | Lint (`npx oxlint`) | sem apontamentos |
 | TypeScript | não se aplica |
 | Erros conhecidos | nenhum nos testes; telas ainda não exercitadas em navegador com MetaMask |
@@ -851,4 +851,4 @@ A primeira versão do contrato permanece no repositório como registro da evolu�
 
 O protótipo assegura a integridade e a ordem dos registros após sua inserção e a identificação da organização e da carteira responsáveis. Não assegura a veracidade da quilometragem, da data ou do local informados, tampouco a presença física no local, nem a identidade da pessoa que controla a carteira. A confiabilidade da entrada depende do credenciamento, do vínculo institucional, das permissões por tipo de organização, da verificação de localização, das evidências anexadas e da análise do DETRAN nas correções. O uso do nome DETRAN é ilustrativo e não indica vínculo com órgão público.
 
-A verificação automatizada compreende 50 testes do contrato e 100 testes de integração das rotas do servidor, executados em rede local. O contrato está implantado na rede de testes Sepolia; os fluxos de interface ainda não foram exercitados em navegador.
+A verificação automatizada compreende 50 testes do contrato e 101 testes de integração das rotas do servidor, executados em rede local. O contrato está implantado na rede de testes Sepolia; os fluxos de interface ainda não foram exercitados em navegador.

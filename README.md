@@ -147,7 +147,7 @@ O `npm run dev` usa **o banco e a rede reais** configurados ali, e cria ou migra
 
 ```bash
 cd contratos && npx hardhat test    # 50 testes: contrato atual e a v1 (histórica)
-cd web && npm test                  # 100 testes: rotas /api de ponta a ponta
+cd web && npm test                  # 101 testes: rotas /api de ponta a ponta
 cd web && npx oxlint && npm run build
 ```
 

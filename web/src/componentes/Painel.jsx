@@ -19,6 +19,7 @@ import MarcasPropostas from "./MarcasPropostas";
 import RegistroEvento from "./RegistroEvento";
 import RegistrosDaOrganizacao from "./RegistrosDaOrganizacao";
 import Correcoes from "./correcoes/Correcoes";
+import Administradores from "./organizacoes/Administradores";
 import Equipe from "./organizacoes/Equipe";
 import Organizacoes from "./organizacoes/Organizacoes";
 
@@ -46,7 +47,9 @@ function secoesDoPainel({ operante, ehDetran, ehAdministrador, vinculo }) {
             titulo: ehDetran ? "Registros de todas as organizações" : "Registros da organização",
             descricao: "Eventos registrados, com data, local e responsável." },
         { id: "equipe", rotulo: "Equipe", pode: operante && ehAdministrador,
-            titulo: "Equipe", descricao: "Vincule, ative e desative os funcionários da sua organização." },
+            titulo: "Equipe", descricao: ehDetran
+                ? "Defina os administradores do DETRAN e vincule, ative e desative os agentes."
+                : "Vincule, ative e desative os funcionários da sua organização." },
         { id: "organizacoes", rotulo: "Organizações", pode: operante && ehDetran,
             titulo: "Organizações", descricao: "Cadastre, credencie e suspenda oficinas, empresas de vistoria e seguradoras." },
         { id: "complementares", rotulo: "Dados complementares", pode: operante && ehDetran,
@@ -60,8 +63,9 @@ function secoesDoPainel({ operante, ehDetran, ehAdministrador, vinculo }) {
 // e a carteira dessa conta com vinculo ativo numa organizacao (no contrato).
 export default function Painel({ secao }) {
     const acesso = useAcesso();
-    const { usuario, organizacao, conta, vinculo, vinculada, liberado, operante, ehAdministrador } = acesso;
+    const { usuario, organizacao, conta, vinculo, vinculada, liberado, operante, ehDetran, ehAdministrador } = acesso;
     const [chassiConsulta, setChassiConsulta] = useState("");
+    const [versaoDaEquipe, setVersaoDaEquipe] = useState(0);
 
     const secoes = secoesDoPainel(acesso);
 
@@ -129,7 +133,13 @@ export default function Painel({ secao }) {
                         {secao === "cadastro" && <CadastroVeiculo acesso={acesso} aoVerHistorico={verHistorico} />}
                         {secao === "correcoes" && <Correcoes acesso={acesso} aoVerHistorico={verHistorico} />}
                         {secao === "registros" && <RegistrosDaOrganizacao acesso={acesso} aoVerHistorico={verHistorico} />}
-                        {secao === "equipe" && <Equipe usuario={usuario} />}
+                        {secao === "equipe" && (
+                            <div className="empilhado">
+                                {/* Os administradores do proprio DETRAN; os das demais organizacoes ficam em Organizacoes. */}
+                                {ehDetran && organizacao && <Administradores organizacao={organizacao} aoAlterar={() => setVersaoDaEquipe((v) => v + 1)} />}
+                                <Equipe key={versaoDaEquipe} usuario={usuario} />
+                            </div>
+                        )}
                         {secao === "organizacoes" && <Organizacoes usuario={usuario} />}
                         {secao === "complementares" && <DadosComplementares />}
                         {secao === "auditoria" && <div className="empilhado"><Auditoria />{ehAdministrador && <MarcasPropostas />}</div>}
