@@ -804,7 +804,7 @@ Definido em `web/demo/cenario.mjs` e criado por `npm run demo:preparar`. Todos o
 | Vistoria KM Teste | VISTORIA | Vitória - ES | Gerente da Vistoria KM Teste | Vistoriador da Vistoria KM Teste |
 | Seguradora KM Teste | SEGURADORA | Vila Velha - ES | Gerente da Seguradora KM Teste | Analista da Seguradora KM Teste |
 
-As oito contas usam e-mails do domínio definido em `web/demo/cenario.mjs` e a senha de `DEMO_SENHA`. As contas criadas na Sepolia em 04/10/2026 usam `@demo.kmchain.test`; o domínio do arquivo foi alterado depois para `@exemplo.com` e vale para as próximas criações. Cada conta tem uma carteira: no ambiente local, as contas de teste do Hardhat; na Sepolia, as de `web/demo/carteiras.local`, criadas por `npm run demo:carteiras` (a do administrador do DETRAN é a que implanta o contrato).
+As oito contas usam e-mails do domínio definido em `web/demo/cenario.mjs` e a senha de `DEMO_SENHA`. O domínio atual é `@exemplo.com`. Cada conta tem uma carteira: no ambiente local, as contas de teste do Hardhat; na Sepolia, as de `web/demo/carteiras.local`, criadas por `npm run demo:carteiras` (a do administrador do DETRAN é a que implanta o contrato).
 
 ### Veículos
 
