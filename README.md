@@ -46,6 +46,51 @@ Em cada organização há um administrador, definido pelo DETRAN, que vincula os
 
 ---
 
+## Como testar
+
+### Consulta pública (sem conta)
+
+Acesse https://kmchain-web.vercel.app e consulte um dos veículos fictícios do cenário de demonstração:
+
+| Chassi | O que mostra |
+|---|---|
+| `9KMDEM00000000001` | histórico normal, com eventos de DETRAN, oficina, empresa de vistoria e seguradora |
+| `9KMDEM00000000002` | erro de digitação corrigido: o registro original continua, ao lado da correção |
+| `9KMDEM00000000003` | registros feitos fora do local cadastrado da organização |
+| `9KMDEM00000000004` | vistoria a pedido de seguradora |
+
+Link direto: https://kmchain-web.vercel.app/?chassi=9KMDEM00000000001. O mapa das organizações fica em https://kmchain-web.vercel.app/#/organizacoes.
+
+### Painel institucional (ambiente local)
+
+As contas do site publicado não são divulgadas: quem tivesse as chaves poderia gravar no contrato em nome das organizações. Para experimentar o painel, use o ambiente local, que sobe uma blockchain e um banco descartáveis na sua máquina:
+
+```bash
+cd contratos && npm install
+cd ../web && npm install
+npm run demo:local        # aplicação em http://localhost:5173
+npm run demo:preparar     # em outro terminal: cria o cenário de demonstração
+```
+
+Na MetaMask, adicione a rede local (RPC `http://127.0.0.1:8545`, chain ID `31337`) e importe a conta de teste que for usar. As chaves são as contas públicas do Hardhat, listadas em `web/demo/carteiras.mjs` na ordem abaixo. Servem só nessa rede local.
+
+| Conta | E-mail | Chave em `carteiras.mjs` |
+|---|---|---|
+| Administrador do DETRAN | `detran.admin@exemplo.com` | 1ª |
+| Agente do DETRAN | `detran.agente@exemplo.com` | 2ª |
+| Gerente da oficina | `oficina.admin@exemplo.com` | 3ª |
+| Mecânico da oficina | `oficina.mecanico@exemplo.com` | 4ª |
+| Gerente da vistoria | `vistoria.admin@exemplo.com` | 5ª |
+| Vistoriador | `vistoria.vistoriador@exemplo.com` | 6ª |
+| Gerente da seguradora | `seguradora.admin@exemplo.com` | 7ª |
+| Analista da seguradora | `seguradora.analista@exemplo.com` | 8ª |
+
+Senha de todas as contas no ambiente local: `demo-kmchain-local`.
+
+Ao entrar, conecte na MetaMask a carteira da conta. Cada ação de escrita (credenciar, registrar evento, aprovar correção) pede uma assinatura. Mais detalhes em [docs/AMBIENTE.md](docs/AMBIENTE.md).
+
+---
+
 ## O que fica na blockchain e o que fica no banco
 
 | Na blockchain | No banco |
