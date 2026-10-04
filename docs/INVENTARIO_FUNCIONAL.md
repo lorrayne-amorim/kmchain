@@ -4,11 +4,11 @@ Estado do código em 04/10/2026. Descreve o que o sistema faz hoje, como faz e q
 
 **Leia antes:**
 
-- O `KmChainRegistryV2` é o único contrato usado pela aplicação. Foi implantado na Sepolia em 04/10/2026, em `0x149954119af7491fA8d602A2009b31f8c05652f0`, com o código-fonte verificado no Etherscan. O site publicado só passa a usá-lo depois de um novo deploy da aplicação.
+- O `KmChainRegistryV2` é o único contrato usado pela aplicação. Foi implantado na Sepolia em 04/10/2026, em `0x149954119af7491fA8d602A2009b31f8c05652f0`, com o código-fonte verificado no Etherscan. O site publicado já usa esse contrato.
 - A primeira versão do contrato (`KmChainRegistry.sol`, v1) e os testes dela continuam no repositório, como registro da evolução do projeto. A aplicação não lê nem escreve nela.
 - O banco foi limpo e o cenário de demonstração (seção Z) foi criado na Sepolia em 04/10/2026, pelo script, com a aplicação rodando localmente contra o banco e a rede reais. Banco e contrato foram conferidos: os 15 eventos existem nos dois.
 - A interface foi validada por build e lint. Os fluxos de tela **não foram exercitados em navegador** (exigem MetaMask); o que está coberto por teste automatizado é o contrato e as rotas `/api`.
-- O roteamento na Vercel (`vercel.json`) é novo e não foi testado em deploy.
+- A versão atual está publicada em https://kmchain-web.vercel.app. As rotas `/api` foram conferidas no site publicado (lista de organizações, identificação de veículo, recusa sem sessão e rota inexistente), o que valida o roteamento do `vercel.json`.
 - A verificação de localização do dispositivo (seção M.1) foi acrescentada depois da primeira versão deste inventário. Ela é toda off-chain: **o contrato não foi alterado**.
 
 Legenda de situação: **[I]** implementado · **[P]** parcialmente implementado · **[N]** não implementado.
