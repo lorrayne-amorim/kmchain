@@ -14,7 +14,7 @@ const ACOES = {
     organizacao_reativada: "Organização reativada",
     organizacao_alterada: "Cadastro de organização alterado",
     administrador_definido: "Administrador definido",
-    administrador_alterado: "Administrador alterado",
+    administrador_removido: "Administração retirada",
     carteira_definida: "Carteira de conta definida pelo DETRAN",
     funcionario_cadastrado: "Funcionário vinculado",
     funcionario_desativado: "Funcionário desativado",

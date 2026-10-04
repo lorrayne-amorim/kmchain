@@ -24,7 +24,7 @@ import pg from "pg";
 // Dados que o cenario de demonstracao recria. A ordem nao importa: o
 // TRUNCATE ... CASCADE trata as chaves estrangeiras.
 const TABELAS = [
-    "auditoria", "solicitacoes_correcao", "eventos", "membros", "organizacao_nomes", "organizacoes",
+    "auditoria", "solicitacoes_correcao", "eventos", "membros", "vinculos_sem_conta", "organizacao_nomes", "organizacoes",
     "veiculo_placas", "veiculo_ufs", "veiculo_proprietarios", "veiculos",
     "tokens_documento", "acessos_documentos", "documentos", "marcas_adicionais", "usuarios"
 ];

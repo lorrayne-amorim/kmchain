@@ -1,44 +1,81 @@
-// Funcionarios de uma organizacao. Quem vincula e desativa e o
-// administrador, assinando no contrato; o servidor espelha o resultado no
-// banco e registra a auditoria.
+// Vinculos das carteiras com as organizacoes: funcionarios e administradores.
+//
+// Quem cria e altera um vinculo e o contrato: o administrador vincula e
+// desativa funcionarios, e o DETRAN define os administradores. O servidor so
+// ESPELHA no banco o que o contrato mostra para cada carteira, e registra a
+// auditoria. O vinculo e da carteira: ela pode ser vinculada antes de a
+// pessoa ter conta, e a conta assume o vinculo quando vincula essa carteira.
 import { ErroHttp } from "../nucleo/http.js";
-import { buscarOrganizacao, buscarOrganizacaoPorIdCadeia, definirAdministrador } from "../repositorios/organizacoes.js";
-import { buscarContaPorCarteira, listarMembros, salvarMembro } from "../repositorios/membros.js";
+import { buscarOrganizacao, buscarOrganizacaoPorIdCadeia } from "../repositorios/organizacoes.js";
+import * as membros from "../repositorios/membros.js";
 import { ACOES, registrarAuditoria } from "./auditoria.js";
 import { ehDetran, vinculoDaCarteira } from "./autorizacao.js";
 
-// Espelha no banco o vinculo que o contrato mostra para `carteira`. So vale
-// para carteiras da organizacao de quem pede: um administrador nao alcanca
-// funcionarios de outra organizacao.
-export async function sincronizarFuncionario(carteira, acesso) {
+const curta = (carteira) => `${carteira.slice(0, 8)}…${carteira.slice(-4)}`;
+
+// Acao de auditoria que descreve a passagem do vinculo anterior para o atual.
+function acaoDoVinculo(anterior, atual) {
+    if (!anterior) {
+        if (!atual.ativo) return null;
+        return atual.papel === "administrador" ? ACOES.ADMINISTRADOR_DEFINIDO : ACOES.FUNCIONARIO_CADASTRADO;
+    }
+    if (anterior.ativo && !atual.ativo) return ACOES.FUNCIONARIO_DESATIVADO;
+    if (!anterior.ativo && atual.ativo) return ACOES.FUNCIONARIO_REATIVADO;
+    if (anterior.papel !== atual.papel) {
+        return atual.papel === "administrador" ? ACOES.ADMINISTRADOR_DEFINIDO : ACOES.ADMINISTRADOR_REMOVIDO;
+    }
+    return null;
+}
+
+// Grava no banco o vinculo que o contrato mostra para a carteira: na equipe,
+// se a carteira ja pertence a uma conta, ou na lista de carteiras que
+// aguardam conta. `acesso` e quem fez a alteracao, para a auditoria.
+export async function espelharVinculo(carteira, vinculo, organizacao, acesso = null) {
+    const atual = { ativo: vinculo.ativo, papel: vinculo.administrador ? "administrador" : "funcionario" };
+    const conta = await membros.buscarContaPorCarteira(carteira);
+
+    let anterior;
+    if (conta) {
+        anterior = await membros.salvarMembro({ organizacaoId: organizacao.id, usuarioId: conta.id, carteira: conta.carteira, ...atual });
+        await membros.removerVinculoSemConta(carteira);
+    } else {
+        anterior = await membros.buscarVinculoSemConta(carteira);
+        if (anterior) anterior = { ...anterior, ativo: true };
+        if (atual.ativo) await membros.salvarVinculoSemConta(carteira, organizacao.id, atual.papel);
+        else await membros.removerVinculoSemConta(carteira);
+    }
+
+    const acao = acesso && acaoDoVinculo(anterior, atual);
+    if (acao) {
+        await registrarAuditoria(acao, acesso, { tipo: conta ? "usuario" : "carteira", id: conta?.id ?? carteira.toLowerCase() }, {
+            funcionario: conta?.nome ?? `carteira ${curta(carteira)}`, organizacao: organizacao.nome_fantasia
+        });
+    }
+    return { nome: conta?.nome ?? null, email: conta?.email ?? null, carteira: carteira.toLowerCase(), semConta: !conta, ...atual };
+}
+
+// Espelha o vinculo de uma carteira depois de uma alteracao no contrato. O
+// administrador so alcanca carteiras da propria organizacao; o DETRAN, as de
+// qualquer uma (e ele quem define os administradores).
+export async function sincronizarVinculo(carteira, acesso) {
     if (!/^0x[0-9a-fA-F]{40}$/.test(carteira ?? "")) {
         throw new ErroHttp(400, "carteira_invalida", "Endereço de carteira inválido.");
     }
+    if (!ehDetran(acesso) && !acesso.vinculo.administrador) {
+        throw new ErroHttp(403, "apenas_administrador", "Apenas o administrador da organização pode fazer isso.");
+    }
     const vinculo = await vinculoDaCarteira(carteira);
-    if (vinculo.organizacao !== acesso.vinculo.organizacao) {
+    if (!ehDetran(acesso) && vinculo.organizacao !== acesso.vinculo.organizacao) {
         throw new ErroHttp(403, "outra_organizacao", "Esta carteira não pertence à sua organização.");
     }
-    const conta = await buscarContaPorCarteira(carteira);
-    if (!conta) throw new ErroHttp(404, "conta_nao_encontrada", "Não há conta com esta carteira vinculada.");
-
-    const anterior = await salvarMembro({
-        organizacaoId: acesso.organizacao.id, usuarioId: conta.id, carteira: conta.carteira,
-        papel: vinculo.administrador ? "administrador" : "funcionario", ativo: vinculo.ativo
-    });
-
-    let acao = null;
-    if (!anterior) acao = vinculo.ativo ? ACOES.FUNCIONARIO_CADASTRADO : null;
-    else if (anterior.ativo && !vinculo.ativo) acao = ACOES.FUNCIONARIO_DESATIVADO;
-    else if (!anterior.ativo && vinculo.ativo) acao = ACOES.FUNCIONARIO_REATIVADO;
-    if (acao) {
-        await registrarAuditoria(acao, acesso, { tipo: "usuario", id: conta.id }, {
-            funcionario: conta.nome, organizacao: acesso.organizacao.nome_fantasia
-        });
-    }
-    return { nome: conta.nome, email: conta.email, carteira: conta.carteira, ativo: vinculo.ativo };
+    const organizacao = await buscarOrganizacaoPorIdCadeia(vinculo.organizacao);
+    if (!organizacao) throw new ErroHttp(404, "sem_vinculo_no_contrato", "Esta carteira não tem vínculo com uma organização no contrato.");
+    return espelharVinculo(carteira, vinculo, organizacao, acesso);
 }
 
-// Funcionarios de uma organizacao. O administrador ve os da propria; o DETRAN, os de qualquer uma.
+// Equipe de uma organizacao: quem tem conta e as carteiras ja vinculadas no
+// contrato que ainda aguardam a criacao da conta. O administrador ve a da
+// propria organizacao; o DETRAN, a de qualquer uma.
 export async function listarFuncionarios(organizacaoId, acesso) {
     const alvo = organizacaoId ? Number(organizacaoId) : acesso.organizacao.id;
     if (alvo !== acesso.organizacao.id && !ehDetran(acesso)) {
@@ -46,22 +83,20 @@ export async function listarFuncionarios(organizacaoId, acesso) {
     }
     const organizacao = await buscarOrganizacao(alvo);
     if (!organizacao) throw new ErroHttp(404, "organizacao_nao_encontrada", "Organização não encontrada.");
-    return { organizacao: { id: organizacao.id, nome_fantasia: organizacao.nome_fantasia, tipo: organizacao.tipo }, funcionarios: await listarMembros(alvo) };
+    return {
+        organizacao: { id: organizacao.id, id_cadeia: organizacao.id_cadeia, nome_fantasia: organizacao.nome_fantasia, tipo: organizacao.tipo },
+        funcionarios: await membros.listarMembros(alvo),
+        aguardando: await membros.listarVinculosSemConta(alvo)
+    };
 }
 
-// Garante que a conta logada aparece na equipe da organizacao a que o
-// contrato a vincula (ex.: quem implantou o contrato e o primeiro
-// administrador do DETRAN e nao passou pelo cadastro de funcionarios).
+// A conta logada assume o vinculo que o contrato ja tem para a carteira dela:
+// e assim que a pessoa credenciada pela carteira passa a ver a organizacao e
+// o papel ao vincular a carteira a conta.
 export async function espelharVinculoDaConta(usuario, vinculo) {
     if (!vinculo.ativo) return null;
     const organizacao = await buscarOrganizacaoPorIdCadeia(vinculo.organizacao);
     if (!organizacao) return null;
-    await salvarMembro({
-        organizacaoId: organizacao.id, usuarioId: usuario.id, carteira: usuario.carteira,
-        papel: vinculo.administrador ? "administrador" : "funcionario", ativo: true
-    });
-    if (vinculo.administrador && organizacao.administrador_id !== usuario.id) {
-        await definirAdministrador(organizacao.id, usuario.id);
-    }
+    await espelharVinculo(usuario.carteira, vinculo, organizacao);
     return organizacao;
 }

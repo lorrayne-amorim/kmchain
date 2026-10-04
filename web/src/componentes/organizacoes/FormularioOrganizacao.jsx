@@ -78,7 +78,9 @@ export default function FormularioOrganizacao({ organizacao, aoSalvar, aoCancela
         e.preventDefault();
         setFalha("");
         const novos = problemasDaOrganizacao(dados);
-        if (!editando && !dados.administradorEmail.trim()) novos.email_administrador = "Informe o e-mail da conta do administrador.";
+        if (!editando && !dados.administradorEmail.trim() && !dados.administradorCarteira.trim()) {
+            novos.email_administrador = "Informe o e-mail da conta ou a carteira do administrador.";
+        }
         if (dados.administradorCarteira && !carteiraValida(dados.administradorCarteira.trim())) novos.carteira = "Informe o endereço com 0x e 40 caracteres.";
         setErros(novos);
         if (Object.keys(novos).length > 0) return focarPrimeiroErro();
@@ -183,12 +185,17 @@ export default function FormularioOrganizacao({ organizacao, aoSalvar, aoCancela
             {!editando && (
                 <fieldset className="grupo">
                     <legend className="grupo-titulo"><span className="grupo-numero">3</span>Administrador responsável</legend>
-                    <Campo rotulo="E-mail da conta do administrador" erro={erros.email_administrador}
-                        ajuda={erros.email_administrador ? undefined : "A pessoa precisa ter criado a conta no acesso institucional."}>
+                    <p className="painel-texto">
+                        Indique o administrador pelo e-mail da conta, pela carteira, ou pelos dois. Só com a carteira, a pessoa
+                        pode criar a conta depois: ao vincular essa carteira, ela já entra como administradora da organização.
+                        O DETRAN pode definir outros administradores depois do credenciamento.
+                    </p>
+                    <Campo rotulo="E-mail da conta do administrador" opcional erro={erros.email_administrador}
+                        ajuda={erros.email_administrador ? undefined : "De uma conta já criada no acesso institucional."}>
                         <input type="email" value={dados.administradorEmail} onChange={(e) => alterar("administradorEmail", e.target.value)} />
                     </Campo>
                     <Campo rotulo="Carteira do administrador" opcional erro={erros.carteira}
-                        ajuda={erros.carteira ? undefined : "Preencha se a conta ainda não vinculou a carteira, ou para trocar a que está vinculada. É com ela que o credenciamento será assinado."}>
+                        ajuda={erros.carteira ? undefined : "É para esta carteira que o credenciamento é assinado. Com e-mail, preencha só se a conta ainda não vinculou a carteira ou para trocá-la."}>
                         <input className="mono" value={dados.administradorCarteira} placeholder="0x…" autoComplete="off" spellCheck={false}
                             onChange={(e) => alterar("administradorCarteira", e.target.value)} />
                     </Campo>

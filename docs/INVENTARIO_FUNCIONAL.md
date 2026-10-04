@@ -4,9 +4,9 @@ Estado do código em 04/10/2026. Descreve o que o sistema faz hoje, como faz e q
 
 **Leia antes:**
 
-- O `KmChainRegistryV2` é o único contrato usado pela aplicação. Foi implantado na Sepolia em 04/10/2026, em `0x149954119af7491fA8d602A2009b31f8c05652f0`, com o código-fonte verificado no Etherscan. O site publicado já usa esse contrato.
+- O `KmChainRegistryV2` é o único contrato usado pela aplicação. Foi implantado na Sepolia em 04/10/2026, em `0x5D88Ba98B0ed0188E0193E4598841cFE68255152`, com o código-fonte verificado no Etherscan. O site publicado já usa esse contrato.
 - A primeira versão do contrato (`KmChainRegistry.sol`, v1) e os testes dela continuam no repositório, como registro da evolução do projeto. A aplicação não lê nem escreve nela.
-- O banco foi limpo e o cenário de demonstração (seção Z) foi criado na Sepolia em 04/10/2026, pelo script, com a aplicação rodando localmente contra o banco e a rede reais. Banco e contrato foram conferidos: os 15 eventos existem nos dois.
+- O banco foi limpo e o cenário de demonstração (seção Z) foi recriado na Sepolia em 04/10/2026, sobre o contrato atual, pelo script, com a aplicação rodando localmente contra o banco e a rede reais. Banco e contrato foram conferidos: os 15 eventos existem nos dois.
 - A interface foi validada por build e lint. Os fluxos de tela **não foram exercitados em navegador** (exigem MetaMask); o que está coberto por teste automatizado é o contrato e as rotas `/api`.
 - A versão atual está publicada em https://kmchain-web.vercel.app. As rotas `/api` foram conferidas no site publicado (lista de organizações, identificação de veículo, recusa sem sessão e rota inexistente), o que valida o roteamento do `vercel.json`.
 - A verificação de localização do dispositivo (seção M.1) foi acrescentada depois da primeira versão deste inventário. Ela é toda off-chain: **o contrato não foi alterado**.
@@ -55,12 +55,12 @@ O servidor nunca assina transações. Quem assina é a carteira do usuário; o s
 
 Os tipos pedidos como `WORKSHOP`, `INSPECTION` e `INSURER` foram implementados com nomes em português (`OFICINA`, `VISTORIA`, `SEGURADORA`), seguindo o idioma do código.
 
-Dentro de cada organização há dois papéis: **administrador** (um por organização, definido pelo DETRAN) e **funcionário**.
+Dentro de cada organização há dois papéis: **administrador** (um ou mais por organização, definidos pelo DETRAN) e **funcionário**. O vínculo é da carteira: ela pode ser vinculada antes de a pessoa ter conta, e a conta assume o vínculo quando vincula essa carteira, com assinatura.
 
 ### DETRAN
 
 - **Finalidade:** autoridade administrativa do protótipo.
-- **Pode:** cadastrar, credenciar, suspender e reativar organizações; trocar o administrador de qualquer organização; alterar dados cadastrais; ver a equipe de qualquer organização; cadastrar veículos; registrar os eventos institucionais próprios; corrigir de ofício; aprovar e rejeitar solicitações de correção; consultar e alterar os dados complementares do veículo; abrir qualquer comprovante; propor marcas; ver todos os registros, a lista de contas e a auditoria.
+- **Pode:** cadastrar, credenciar, suspender e reativar organizações; definir e retirar administradores de qualquer organização; informar ou trocar a carteira de uma conta; alterar dados cadastrais; ver a equipe de qualquer organização; cadastrar veículos; registrar os eventos institucionais próprios; corrigir de ofício; aprovar e rejeitar solicitações de correção; consultar e alterar os dados complementares do veículo; abrir qualquer comprovante; propor marcas; ver todos os registros, a lista de contas e a auditoria.
 - **Só o administrador do DETRAN:** vincular e desativar funcionários do DETRAN; aprovar ou recusar marcas propostas.
 - **Não pode:** registrar eventos de oficina, vistoria ou seguradora; abrir solicitação de correção; ser suspenso.
 - **Telas:** Início, Consultar, Novo registro, Cadastrar veículo, Correções, Registros, Organizações, Dados complementares, Auditoria; Equipe (só o administrador).
@@ -93,10 +93,11 @@ Dentro de cada organização há dois papéis: **administrador** (um por organiz
 | 7 | Cadastrar organização | DETRAN | — | `organizacoes` (pendente) | [I] |
 | 8 | Credenciar organização | DETRAN | `credenciarOrganizacao` | situação, id em cadeia | [I] |
 | 9 | Suspender e reativar | DETRAN | `definirSituacaoDaOrganizacao` | situação espelhada | [I] |
-| 10 | Trocar administrador | DETRAN | `definirAdministrador` | `membros`, `organizacoes` | [I] |
+| 10 | Definir e retirar administradores (um ou mais por organização) | DETRAN | `definirAdministrador` | `membros`, `vinculos_sem_conta` | [I] |
 | 10a | Informar ou trocar a carteira de uma conta (no cadastro da organização ou no detalhe dela) | DETRAN | `definirAdministrador`, se a organização já estiver credenciada | `usuarios.carteira`, auditoria | [I] |
 | 11 | Alterar cadastro da organização | DETRAN | — | cadastro e nome datado | [I] |
-| 12 | Vincular, desativar e reativar funcionário | Administrador | `definirFuncionario` | `membros` | [I] |
+| 12 | Vincular, desativar e reativar funcionário, pelo e-mail da conta ou pela carteira | Administrador | `definirFuncionario` | `membros`, `vinculos_sem_conta` | [I] |
+| 12a | Credenciar e vincular só pela carteira; a conta assume o vínculo ao vincular a carteira | DETRAN, administrador, a própria pessoa | vínculo da carteira | `vinculos_sem_conta` → `membros` | [I] |
 | 13 | Consultar equipe | Administrador, DETRAN | — | `membros` | [I] |
 | 14 | Cadastrar veículo | DETRAN | `cadastrarVeiculo` | identificação, placa, UF, proprietário | [I] |
 | 15 | Registrar evento | Todos os tipos | `registrarEvento` | complemento do evento | [I] |
@@ -148,7 +149,7 @@ Navegação por hash. Não há roteador.
 | Correções | `…/correcoes` | Vínculo ativo | `Correcoes`, `SolicitarCorrecao`, `AnaliseCorrecao`, `CorrigirLeitura` | solicitar; analisar; corrigir de ofício |
 | Registros | `…/registros` | Vínculo ativo | `RegistrosDaOrganizacao` | listar, abrir histórico, abrir transação, ver a situação da localização; o DETRAN filtra e abre os detalhes da localização |
 | Equipe | `…/equipe` | Administrador | `Equipe` | vincular, desativar, reativar |
-| Organizações | `…/organizacoes` | DETRAN | `Organizacoes`, `FormularioOrganizacao`, `Equipe`, `MapaOrganizacoes` | cadastrar, credenciar, suspender, reativar, trocar administrador, editar |
+| Organizações | `…/organizacoes` | DETRAN | `Organizacoes`, `FormularioOrganizacao`, `Administradores`, `Equipe`, `MapaOrganizacoes` | cadastrar, credenciar, suspender, reativar, definir e retirar administradores, trocar a carteira de um administrador, editar |
 | Dados complementares | `…/complementares` | DETRAN | `DadosComplementares`, `CompletarIdentificacao` | consultar, alterar, completar |
 | Auditoria | `…/auditoria` | DETRAN | `Auditoria`, `MarcasPropostas` | filtrar; revisar marcas (administrador) |
 
@@ -194,7 +195,7 @@ Um tipo novo entra no catálogo e é liberado em cadeia por `definirTiposPermiti
 
 ## F. Blockchain
 
-**Contrato:** `contratos/contracts/KmChainRegistryV2.sol`, Solidity 0.8.24, sem dependências externas. Implantado na Sepolia em `0x149954119af7491fA8d602A2009b31f8c05652f0` (deploy de 2.245.627 gas; fonte verificada no Etherscan). É o único contrato usado pela aplicação. A carteira que implantou, `0x3abCa8bD636b17391B6E8bDE4B58D5f16643Ea0F`, é a administradora do DETRAN. A primeira versão, `KmChainRegistry.sol` (v1), permanece no repositório com seus testes e na Sepolia em `0x8BcAB5232FFa571B802ac444E5Aba43f7333c49C`; o contrato novo guarda esse endereço em `contratoAnterior` apenas como referência histórica.
+**Contrato:** `contratos/contracts/KmChainRegistryV2.sol`, Solidity 0.8.24, sem dependências externas. Implantado na Sepolia em `0x5D88Ba98B0ed0188E0193E4598841cFE68255152` (deploy de 2.350.899 gas; fonte verificada no Etherscan). Um primeiro deploy do mesmo dia, em `0x149954119af7491fA8d602A2009b31f8c05652f0`, foi abandonado quando o contrato passou a aceitar vários administradores por organização. É o único contrato usado pela aplicação. A carteira que implantou, `0x3abCa8bD636b17391B6E8bDE4B58D5f16643Ea0F`, é a administradora do DETRAN. A primeira versão, `KmChainRegistry.sol` (v1), permanece no repositório com seus testes e na Sepolia em `0x8BcAB5232FFa571B802ac444E5Aba43f7333c49C`; o contrato novo guarda esse endereço em `contratoAnterior` apenas como referência histórica.
 
 ### Estruturas
 
@@ -209,10 +210,10 @@ Veiculo (1 slot)
   ultimaKm uint64 · ultimaDataEvento uint64
 
 Organizacao (1 slot)
-  tipo uint8 · ativa bool · credenciadaEm uint64 · administrador address
+  tipo uint8 · ativa bool · credenciadaEm uint64 · administradores uint32 (quantidade)
 
 Vinculo
-  organizacao uint32 · ativo bool
+  organizacao uint32 · ativo bool · administrador bool
 ```
 
 Mapeamentos: organização por id; vínculo por carteira; veículo e histórico por chave; `correcaoDe` (índice corrigido → índice da correção); `tiposPermitidos` por tipo de organização (máscara de bits).
@@ -221,10 +222,10 @@ Mapeamentos: organização por id; vínculo por carteira; veículo e histórico 
 
 | Função | Quem | O que faz |
 |---|---|---|
-| `credenciarOrganizacao(tipo, administrador)` | DETRAN | cria a organização com id sequencial e vincula o administrador |
+| `credenciarOrganizacao(tipo, administrador)` | DETRAN | cria a organização com id sequencial e vincula o primeiro administrador |
 | `definirSituacaoDaOrganizacao(id, ativa)` | DETRAN | suspende ou reativa (não vale para o DETRAN) |
-| `definirAdministrador(id, novo)` | DETRAN | troca o administrador; o anterior continua vinculado |
-| `definirFuncionario(carteira, ativo)` | Administrador | vincula ou desativa na própria organização |
+| `definirAdministrador(id, carteira, administrador)` | DETRAN | dá ou retira a administração; quem deixa de administrar continua vinculado; a organização nunca fica sem administrador |
+| `definirFuncionario(carteira, ativo)` | Administrador | vincula ou desativa na própria organização; não desativa outro administrador |
 | `cadastrarVeiculo(chave, km, dataEvento, municipio, hash)` | DETRAN | cria o veículo com o evento 0 |
 | `registrarEvento(chave, km, tipo, dataEvento, municipio, hash, confirmarAtipica)` | Vínculo ativo | registra um evento do tipo permitido |
 | `corrigirLeitura(chave, indice, kmCorreta, dataEvento, municipio, hash)` | DETRAN | registra a correção |
@@ -237,11 +238,11 @@ Mapeamentos: organização por id; vínculo por carteira; veículo e histórico 
 
 ### Funções internas relevantes
 
-`_vinculoAtivo` (exige vínculo ativo em organização ativa), `_vincular` (uma carteira por organização), `_definirAdministrador`, `_avaliar` (regras de km, data e atípico), `_conferirDataDoEvento`, `_conferirMunicipio`, `_anexar`, `_permitir`, `_faixa`.
+`_vinculoAtivo` (exige vínculo ativo em organização ativa), `_vincular` (uma carteira por organização), `_tornarAdministrador`, `_avaliar` (regras de km, data e atípico), `_conferirDataDoEvento`, `_conferirMunicipio`, `_anexar`, `_permitir`, `_faixa`.
 
 ### Eventos Solidity
 
-`VeiculoCadastrado(chave)`, `EventoRegistrado(chave, indice)`, `LeituraCorrigida(chave, indiceOriginal, indiceCorrecao)`, `OrganizacaoCredenciada(organizacao, tipo)`, `SituacaoDaOrganizacaoAlterada(organizacao, ativa)`, `AdministradorDefinido(organizacao, administrador)`, `FuncionarioDefinido(organizacao, carteira, ativo)`, `TiposPermitidosAlterados(tipoOrganizacao, tipos)`. Levam só identificadores.
+`VeiculoCadastrado(chave)`, `EventoRegistrado(chave, indice)`, `LeituraCorrigida(chave, indiceOriginal, indiceCorrecao)`, `OrganizacaoCredenciada(organizacao, tipo)`, `SituacaoDaOrganizacaoAlterada(organizacao, ativa)`, `AdministradorDefinido(organizacao, carteira, administrador)`, `FuncionarioDefinido(organizacao, carteira, ativo)`, `TiposPermitidosAlterados(tipoOrganizacao, tipos)`. Levam só identificadores.
 
 ### Regras de acesso
 
@@ -306,6 +307,7 @@ Migração aditiva e idempotente em `web/servidor/nucleo/banco.js`, executada na
 | `organizacoes` | cadastro das organizações | id_cadeia, tipo, razão social, nome fantasia, CNPJ, contato, endereço, municipio_ibge, latitude, longitude, situacao, credenciada_em, credenciamento_tx | administrador_id, criada_por → `usuarios` |
 | `organizacao_nomes` | nomes datados | razão social, nome fantasia, vigente_desde | organizacao_id |
 | `membros` | vínculo conta–organização (espelho do contrato) | carteira, papel, ativo, vinculado_em, desativado_em | organizacao_id, usuario_id |
+| `vinculos_sem_conta` | carteiras já vinculadas no contrato cuja pessoa ainda não criou conta | carteira, papel | organizacao_id |
 | `eventos` | complemento de cada evento em cadeia | chassi, contrato, indice, tipo_codigo, tipo_evento, quilometragem, observada_em (data do evento), registrado_em_cadeia, municipio_ibge, referencia_indice, hash_documento, justificativa, tx_hash, carteira; verificação de localização: localizacao_situacao, localizacao_latitude, localizacao_longitude, localizacao_precisao (m), localizacao_distancia (m), localizacao_capturada_em, localizacao_motivo, localizacao_justificativa | organizacao_id, seguradora_id, usuario_id |
 | `solicitacoes_correcao` | pedidos de correção | chassi, indice_original, km_original, km_solicitada, justificativa, hash_evidencia, vistoria_indice, situacao, motivo_decisao, correcao_indice, correcao_tx | organizacao_id, usuario_id, analisada_por |
 | `auditoria` | ações administrativas | acao, alvo_tipo, alvo_id, detalhes (JSON) | usuario_id, organizacao_id |
@@ -346,12 +348,12 @@ A rota declara o que exige: tipos de organização aceitos e, quando for o caso,
 
 1. **Cadastro.** O DETRAN preenche tipo, razão social, nome fantasia, CNPJ, telefone, e-mail, CEP, logradouro, número, complemento, bairro, UF e cidade, posição no mapa (opcional) e o e-mail da conta do administrador. O servidor valida (inclusive dígitos do CNPJ e o município na lista do IBGE) e grava como **pendente**.
 2. **Credenciamento.** O DETRAN assina `credenciarOrganizacao`. O servidor confere a transação, lê o id atribuído e o administrador gravados, e marca a organização como **ativa**.
-3. **Administrador.** Precisa ter conta e carteira, e não estar ativo em outra organização. A carteira pode ser vinculada pela própria pessoa, com assinatura, ou informada pelo DETRAN no cadastro da organização ou no detalhe dela ("Informar carteira" / "Trocar carteira"). Se a organização já estiver credenciada, a troca da carteira é seguida da assinatura de `definirAdministrador` para a carteira nova; a anterior continua vinculada à organização no contrato, como funcionário. A troca é assinada pelo DETRAN e espelhada no banco; o anterior vira funcionário.
-4. **Funcionários.** O administrador informa o e-mail de uma conta já criada, assina `definirFuncionario` e o servidor espelha. Desativar não apaga: o vínculo fica com data de desativação.
+3. **Administradores.** Uma organização tem um ou mais. O primeiro é indicado no cadastro, pelo e-mail de uma conta, pela carteira, ou pelos dois; os demais são definidos pelo DETRAN no detalhe da organização, do mesmo jeito. Quem é indicado só pela carteira pode criar a conta depois: ao vincular a carteira, com assinatura, a conta assume a administração. O DETRAN também retira a administração (a pessoa continua como funcionário) e troca a carteira de um administrador com conta, assinando a entrada da carteira nova e a saída da antiga. A carteira informada pelo DETRAN para uma conta, sem assinatura da pessoa, continua disponível e fica na auditoria.
+4. **Funcionários.** O administrador informa o e-mail de uma conta ou o endereço de uma carteira, assina `definirFuncionario` e o servidor espelha. A carteira sem conta aparece na equipe como "aguardando criação de conta". Um administrador não desativa outro administrador. Desativar não apaga: o vínculo fica com data de desativação.
 5. **Situação.** `pendente`, `ativa`, `suspensa`. Suspender e reativar são transações do DETRAN. A organização suspensa não registra; o que ela já registrou permanece.
 6. **Alteração cadastral.** Só o DETRAN. Tipo e CNPJ não mudam. Mudança de nome gera linha em `organizacao_nomes`, e a consulta pública mostra o nome da época do evento.
 
-Limitações: não há exclusão de organização pendente nem troca do administrador indicado antes do credenciamento.
+Limitações: não há exclusão de organização pendente; antes do credenciamento, só dá para trocar a carteira do administrador indicado quando ele foi indicado por e-mail. Uma carteira digitada errada fica vinculada no contrato até o DETRAN retirar a administração dela.
 
 ---
 
@@ -555,13 +557,13 @@ Todos sob `/api`. "Membro" = sessão + carteira vinculada + vínculo ativo em or
 | POST `contas/localizar` | achar conta por e-mail | DETRAN ou administrador | email | nome, email, carteira |
 | POST `contas/carteira` | informar ou trocar a carteira de uma conta | DETRAN | email, carteira | nome, email, carteira |
 | GET `organizacoes` | lista pública | — | — | nome, tipo, endereço, coordenadas, situação, nomes datados |
-| POST `organizacoes` | cadastrar | DETRAN | cadastro + e-mail do administrador e, opcionalmente, a carteira dele | organização e dados para assinar |
+| POST `organizacoes` | cadastrar | DETRAN | cadastro + e-mail e/ou carteira do administrador | organização e dados para assinar |
 | PATCH `organizacoes` | alterar cadastro | DETRAN | id + cadastro | organização |
 | GET `organizacoes/gestao` | lista completa | DETRAN | — | organizações |
 | POST `organizacoes/credenciamento` | confirmar credenciamento | DETRAN | id, txHash | organização |
-| POST `organizacoes/sincronizar` | espelhar situação e administrador | DETRAN | id | organização |
-| GET `funcionarios` | equipe | administrador (própria) ou DETRAN | `?organizacao=` | funcionários |
-| POST `funcionarios/sincronizar` | espelhar vínculo | administrador | carteira | funcionário |
+| POST `organizacoes/sincronizar` | espelhar a situação (ativa ou suspensa) | DETRAN | id | organização |
+| GET `funcionarios` | equipe | administrador (própria) ou DETRAN | `?organizacao=` | funcionários e carteiras aguardando conta |
+| POST `funcionarios/sincronizar` | espelhar o vínculo de uma carteira | administrador (própria organização) ou DETRAN | carteira | vínculo espelhado |
 | POST `eventos/conferir` | validar antes de assinar, incluindo a localização | membro | chassi, tipo, km, data, município, complemento, `localizacao` (latitude, longitude, precisao, capturadaEm, ou motivo), `justificativaLocalizacao` | ok e a situação e a distância decididas pelo servidor; 400 se faltar a justificativa |
 | POST `eventos` | gravar complemento e a verificação de localização | membro | chassi, txHash, complemento, `localizacao`, `justificativaLocalizacao` | ok, índice |
 | GET `eventos` | registros | membro | `?organizacao=` e `?localizacao=divergente\|nao_verificada` (só DETRAN) | eventos com a situação da localização; para o DETRAN, também coordenadas, precisão, distância, motivo, justificativa e endereço da organização |
@@ -586,9 +588,9 @@ Todos sob `/api`. "Membro" = sessão + carteira vinculada + vínculo ativo em or
 
 **1. Credenciamento.** DETRAN preenche o cadastro → servidor valida e grava como pendente → DETRAN assina `credenciarOrganizacao` → servidor confere a transação, grava o id em cadeia, ativa a organização e registra a auditoria.
 
-**2. Administrador.** A pessoa cria a conta e vincula a carteira → o DETRAN informa o e-mail dela no cadastro da organização → o credenciamento a vincula no contrato. Troca: DETRAN informa o e-mail do novo → assina `definirAdministrador` → servidor espelha.
+**2. Administradores.** O DETRAN indica o primeiro no cadastro (e-mail e/ou carteira) e o credenciamento o vincula no contrato. Outros: no detalhe da organização, o DETRAN informa e-mail ou carteira → assina `definirAdministrador(…, true)` → servidor espelha. Retirar: assina `definirAdministrador(…, false)`. Quem foi indicado só pela carteira: cria a conta → conecta e vincula a carteira, assinando → o servidor lê o vínculo no contrato e a conta passa a ver a organização e o papel.
 
-**3. Funcionário.** A pessoa cria a conta e vincula a carteira → o administrador informa o e-mail → assina `definirFuncionario` → servidor espelha em `membros` e audita.
+**3. Funcionário.** O administrador informa o e-mail da conta ou a carteira → assina `definirFuncionario` → servidor espelha em `membros` (ou em `vinculos_sem_conta`, se ainda não há conta) e audita. A pessoa sem conta entra na equipe ao criar a conta e vincular a carteira.
 
 **4 e 5. Evento.** Funcionário informa chassi, tipo, km, data e local → ao revisar, o navegador captura a localização do dispositivo → servidor confere permissão e dados, calcula a distância até a organização e decide a situação → se a situação exigir, a tela pede a justificativa e a conferência é refeita → envio do comprovante (opcional) → carteira assina `registrarEvento`, com o código IBGE do município → contrato confere vínculo, tipo, km e data → confirmada, a tela envia o hash da transação, a localização e a justificativa → servidor lê o evento no contrato, recalcula a verificação e grava o complemento.
 
@@ -619,7 +621,7 @@ Todos sob `/api`. "Membro" = sessão + carteira vinculada + vínculo ativo em or
 | Consultar histórico e mapa | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Cadastrar e credenciar organização | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Suspender e reativar organização | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Trocar administrador | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Definir e retirar administradores | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Informar ou trocar a carteira de outra conta | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Vincular e desativar funcionário da própria organização | A | A | A | A | ✗ |
 | Ver equipe da própria organização | A | A | A | A | ✗ |
@@ -662,7 +664,7 @@ O DETRAN não abre solicitação porque corrige de ofício.
 | Motivo de a localização não ter sido obtida | não | sim | informado pelo navegador |
 | Justificativa de registro fora do local ou sem localização | não | sim | só o DETRAN vê |
 | Organização responsável | sim (id) | sim (cadastro) | |
-| Tipo, situação e administrador da organização | sim | sim (espelho) | |
+| Tipo e situação da organização; quais carteiras a administram | sim | sim (espelho) | |
 | Nome, CNPJ, contato e endereço da organização | não | sim | nomes com histórico datado |
 | Coordenadas da organização | não | sim | |
 | Usuário responsável | sim (carteira) | sim (nome e e-mail) | |
@@ -770,8 +772,8 @@ O DETRAN não abre solicitação porque corrige de ofício.
 | Build do frontend (`npm run build`) | concluído; aviso de um bloco acima de 500 kB (já existia) |
 | Build do backend | não há etapa de build (funções Node) |
 | Cenário de demonstração (`npm run demo:preparar`) | criado por completo no ambiente local e na Sepolia: 3 organizações, 8 contas, 4 veículos, 15 eventos; banco e contrato conferidos |
-| Testes do contrato (`npx hardhat test`) | 49 passando (25 do contrato atual; 24 da v1, mantidos como histórico) |
-| Testes das rotas (`npm test`) | 98 passando (11 da verificação de localização, 3 da carteira informada pelo DETRAN) |
+| Testes do contrato (`npx hardhat test`) | 50 passando (26 do contrato atual; 24 da v1, mantidos como histórico) |
+| Testes das rotas (`npm test`) | 100 passando |
 | Lint (`npx oxlint`) | sem apontamentos |
 | TypeScript | não se aplica |
 | Erros conhecidos | nenhum nos testes; telas ainda não exercitadas em navegador com MetaMask |
@@ -833,7 +835,7 @@ O script assina com as chaves das carteiras de demonstração, sem MetaMask. Na 
 
 O KMChain é um protótipo de registro de eventos com quilometragem veicular sobre uma blockchain pública compatível com Ethereum. Cada evento é gravado por um contrato inteligente e contém a chave do veículo, derivada do chassi por função de hash, a quilometragem, o tipo do evento, a data e hora em que o evento ocorreu, a data e hora do bloco, o código IBGE do município, o identificador da organização responsável, o endereço da carteira que assinou e, quando há comprovante, o hash SHA-256 do documento.
 
-O contrato mantém também o cadastro mínimo das organizações: identificador sequencial, tipo, situação e administrador, além do vínculo de cada carteira com uma organização. O DETRAN, modelado como a primeira organização do contrato, credencia oficinas, empresas de vistoria e seguradoras, suspende e reativa organizações e define seus administradores. O administrador vincula e desativa os funcionários. O contrato só aceita um registro de quem tem vínculo ativo em organização ativa, e apenas para os tipos de evento permitidos ao tipo da organização, segundo uma matriz mantida em cadeia. A organização registrada em cada evento é obtida do vínculo de quem assina, e não de um parâmetro informado.
+O contrato mantém também o cadastro mínimo das organizações: identificador sequencial, tipo e situação, além do vínculo de cada carteira com uma organização e da indicação de quais carteiras a administram. O DETRAN, modelado como a primeira organização do contrato, credencia oficinas, empresas de vistoria e seguradoras, suspende e reativa organizações e define seus administradores, que podem ser vários. Os administradores vinculam e desativam os funcionários. O vínculo pertence à carteira: uma pessoa pode ser credenciada pelo endereço da carteira antes de ter conta, e a conta assume o vínculo quando a pessoa prova a posse da carteira por assinatura. O contrato só aceita um registro de quem tem vínculo ativo em organização ativa, e apenas para os tipos de evento permitidos ao tipo da organização, segundo uma matriz mantida em cadeia. A organização registrada em cada evento é obtida do vínculo de quem assina, e não de um parâmetro informado.
 
 Dados cadastrais e pessoais permanecem fora da blockchain, em um banco relacional: contas, nomes e endereços das organizações, identificação do veículo, placa, unidade federativa e proprietário com histórico datado, o nome de quem realizou cada registro, as solicitações de correção e a trilha de auditoria administrativa. Os comprovantes são cifrados e armazenados em IPFS, e apenas seu hash é gravado em cadeia.
 
@@ -849,4 +851,4 @@ A primeira versão do contrato permanece no repositório como registro da evolu�
 
 O protótipo assegura a integridade e a ordem dos registros após sua inserção e a identificação da organização e da carteira responsáveis. Não assegura a veracidade da quilometragem, da data ou do local informados, tampouco a presença física no local, nem a identidade da pessoa que controla a carteira. A confiabilidade da entrada depende do credenciamento, do vínculo institucional, das permissões por tipo de organização, da verificação de localização, das evidências anexadas e da análise do DETRAN nas correções. O uso do nome DETRAN é ilustrativo e não indica vínculo com órgão público.
 
-A verificação automatizada compreende 49 testes do contrato e 98 testes de integração das rotas do servidor, executados em rede local. O contrato está implantado na rede de testes Sepolia; os fluxos de interface ainda não foram exercitados em navegador.
+A verificação automatizada compreende 50 testes do contrato e 100 testes de integração das rotas do servidor, executados em rede local. O contrato está implantado na rede de testes Sepolia; os fluxos de interface ainda não foram exercitados em navegador.

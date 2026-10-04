@@ -1,5 +1,5 @@
 // Organizacoes e funcionarios: o cadastro fica no servidor; credenciar,
-// suspender, trocar o administrador e vincular funcionarios sao transacoes
+// suspender, definir administradores e vincular funcionarios sao transacoes
 // assinadas no contrato, que o servidor depois espelha.
 import { chamarApi } from "./api";
 import { contratoEscrita } from "./blockchain";
@@ -49,9 +49,14 @@ export async function definirSituacaoDaOrganizacao(organizacao, ativa, aoMudarPa
     return sincronizarOrganizacao(organizacao.id);
 }
 
-export async function trocarAdministrador(organizacao, carteira, aoMudarPasso = () => {}) {
-    await assinar((contrato) => contrato.definirAdministrador(organizacao.id_cadeia, carteira), aoMudarPasso);
-    return sincronizarOrganizacao(organizacao.id);
+const sincronizarVinculo = (carteira) =>
+    chamarApi("funcionarios/sincronizar", { corpo: { carteira }, padrao: "Não foi possível atualizar a equipe." });
+
+// O DETRAN da ou retira de uma carteira a administracao de uma organizacao.
+// Uma organizacao pode ter varios administradores.
+export async function definirAdministrador(organizacao, carteira, administrador, aoMudarPasso = () => {}) {
+    await assinar((contrato) => contrato.definirAdministrador(organizacao.id_cadeia, carteira, administrador), aoMudarPasso);
+    return sincronizarVinculo(carteira);
 }
 
 // O DETRAN informa ou troca a carteira de uma conta (sem assinatura da pessoa).
@@ -72,5 +77,5 @@ export const listarFuncionarios = (organizacaoId) =>
 // O administrador vincula ou desativa um funcionario da propria organizacao.
 export async function definirFuncionario(carteira, ativo, aoMudarPasso = () => {}) {
     await assinar((contrato) => contrato.definirFuncionario(carteira, ativo), aoMudarPasso);
-    return chamarApi("funcionarios/sincronizar", { corpo: { carteira }, padrao: "Não foi possível atualizar a equipe." });
+    return sincronizarVinculo(carteira);
 }

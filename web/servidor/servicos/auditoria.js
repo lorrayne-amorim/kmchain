@@ -9,7 +9,7 @@ export const ACOES = {
     ORGANIZACAO_REATIVADA: "organizacao_reativada",
     ORGANIZACAO_ALTERADA: "organizacao_alterada",
     ADMINISTRADOR_DEFINIDO: "administrador_definido",
-    ADMINISTRADOR_ALTERADO: "administrador_alterado",
+    ADMINISTRADOR_REMOVIDO: "administrador_removido",
     CARTEIRA_DEFINIDA: "carteira_definida",
     FUNCIONARIO_CADASTRADO: "funcionario_cadastrado",
     FUNCIONARIO_DESATIVADO: "funcionario_desativado",

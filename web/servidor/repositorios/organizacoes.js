@@ -18,8 +18,8 @@ export async function inserirOrganizacao(d, criadaPor) {
         `WITH nova AS (
             INSERT INTO organizacoes
                 (tipo, razao_social, nome_fantasia, cnpj, telefone, email, cep, logradouro, numero,
-                 complemento, bairro, municipio_ibge, latitude, longitude, administrador_id, criada_por)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                 complemento, bairro, municipio_ibge, latitude, longitude, administrador_id, criada_por, administrador_carteira)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             RETURNING *
          ), nome AS (
             INSERT INTO organizacao_nomes (organizacao_id, razao_social, nome_fantasia, registrado_por)
@@ -28,7 +28,7 @@ export async function inserirOrganizacao(d, criadaPor) {
          SELECT * FROM nova`,
         [
             d.tipo, d.razaoSocial, d.nomeFantasia, d.cnpj, d.telefone, d.email, d.cep, d.logradouro, d.numero,
-            d.complemento, d.bairro, d.municipio, d.latitude, d.longitude, d.administradorId, criadaPor
+            d.complemento, d.bairro, d.municipio, d.latitude, d.longitude, d.administradorId, criadaPor, d.administradorCarteira
         ]
     );
     return r.rows[0];
@@ -70,8 +70,11 @@ export const marcarCredenciada = (id, idCadeia, txHash, credenciadaEm) => bd(
 export const definirSituacao = (id, situacao) =>
     bd("UPDATE organizacoes SET situacao = $2 WHERE id = $1", [id, situacao]);
 
-export const definirAdministrador = (id, usuarioId) =>
-    bd("UPDATE organizacoes SET administrador_id = $2 WHERE id = $1", [id, usuarioId]);
+// Carteira do administrador indicado, enquanto a organizacao esta pendente.
+export const definirCarteiraDoIndicado = (usuarioId, carteira) => bd(
+    "UPDATE organizacoes SET administrador_carteira = lower($2) WHERE administrador_id = $1 AND id_cadeia IS NULL",
+    [usuarioId, carteira]
+);
 
 // O que qualquer pessoa pode ver: nome, tipo, endereco e situacao das
 // organizacoes ja credenciadas. Sem CNPJ, contato ou administrador.
@@ -91,7 +94,10 @@ export async function listarOrganizacoesPublicas() {
 // Cadastro completo, com o administrador, para a gestao pelo DETRAN.
 export async function listarOrganizacoesCompletas() {
     const r = await bd(
-        `SELECT o.*, u.nome AS administrador_nome, u.email AS administrador_email, u.carteira AS administrador_carteira,
+        `SELECT o.*, u.nome AS indicado_nome, u.email AS indicado_email,
+                (SELECT string_agg(a.nome, ', ' ORDER BY a.nome) FROM membros m JOIN usuarios a ON a.id = m.usuario_id
+                 WHERE m.organizacao_id = o.id AND m.ativo AND m.papel = 'administrador') AS administradores,
+                (SELECT count(*)::int FROM vinculos_sem_conta s WHERE s.organizacao_id = o.id AND s.papel = 'administrador') AS administradores_sem_conta,
                 (SELECT count(*)::int FROM membros m WHERE m.organizacao_id = o.id AND m.ativo) AS funcionarios_ativos
          FROM organizacoes o
          LEFT JOIN usuarios u ON u.id = o.administrador_id

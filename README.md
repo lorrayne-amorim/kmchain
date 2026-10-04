@@ -6,7 +6,7 @@ Protótipo acadêmico (TCC) de **histórico de quilometragem de veículos em blo
 
 > **Protótipo, não sistema oficial.** DETRAN, oficinas, empresas de vistoria e seguradoras são atores **simulados**. Não há vínculo, parceria ou homologação com órgão público, e o credenciamento no KMChain não equivale a credenciamento oficial. Não use dados pessoais reais.
 
-> **Estado atual.** O contrato `KmChainRegistryV2` está na Sepolia em [`0x149954119af7491fA8d602A2009b31f8c05652f0`](https://sepolia.etherscan.io/address/0x149954119af7491fA8d602A2009b31f8c05652f0#code), com o código verificado. A aplicação usa só esse contrato; a primeira versão (v1) fica no repositório como histórico.
+> **Estado atual.** O contrato `KmChainRegistryV2` está na Sepolia em [`0x5D88Ba98B0ed0188E0193E4598841cFE68255152`](https://sepolia.etherscan.io/address/0x5D88Ba98B0ed0188E0193E4598841cFE68255152#code), com o código verificado. A aplicação usa só esse contrato; a primeira versão (v1) fica no repositório como histórico.
 
 A descrição completa do que o sistema faz, tela por tela e rota por rota, está em [docs/INVENTARIO_FUNCIONAL.md](docs/INVENTARIO_FUNCIONAL.md).
 
@@ -36,13 +36,13 @@ A descrição completa do que o sistema faz, tela por tela e rota por rota, est�
 
 | Ator | Papel |
 |---|---|
-| DETRAN | credencia e suspende organizações, define administradores, cadastra veículos, registra eventos institucionais, decide correções |
+| DETRAN | credencia e suspende organizações, define um ou mais administradores por organização, cadastra veículos, registra eventos institucionais, decide correções |
 | Oficina | registra revisão, manutenção, orçamento, inspeção mecânica, reparo e troca de componentes |
 | Empresa de vistoria | registra vistorias (transferência, sinistro, GNV, alteração de característica, cautelar, a pedido de seguradora) |
 | Seguradora | registra vistoria prévia, de renovação e inspeção de sinistro |
 | Público | consulta o histórico e o mapa das organizações, sem conta |
 
-Em cada organização há um administrador, definido pelo DETRAN, que vincula os funcionários.
+Cada organização tem um ou mais administradores, definidos pelo DETRAN, que vinculam os funcionários. Administradores e funcionários podem ser indicados pelo e-mail da conta ou direto pela carteira: quem ainda não tem conta assume o vínculo ao criar a conta e vincular essa carteira.
 
 ---
 
@@ -146,8 +146,8 @@ O `npm run dev` usa **o banco e a rede reais** configurados ali, e cria ou migra
 ## Testes
 
 ```bash
-cd contratos && npx hardhat test    # 49 testes: contrato atual e a v1 (histórica)
-cd web && npm test                  # 98 testes: rotas /api de ponta a ponta
+cd contratos && npx hardhat test    # 50 testes: contrato atual e a v1 (histórica)
+cd web && npm test                  # 100 testes: rotas /api de ponta a ponta
 cd web && npx oxlint && npm run build
 ```
 

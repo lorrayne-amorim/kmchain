@@ -160,7 +160,7 @@ describe("KmChainRegistryV2", function () {
         const o = await c.getOrganizacao(idOficina);
         expect(o.tipo).to.equal(ORG.OFICINA);
         expect(o.ativa).to.equal(true);
-        expect(o.administrador).to.equal(adminOficina.address);
+        expect(o.administradores).to.equal(1);
         const v = await c.vinculoDe(adminOficina.address);
         expect([Number(v.organizacao), Number(v.tipo), v.organizacaoAtiva, v.ativo, v.administrador]).to.deep.equal([idOficina, ORG.OFICINA, true, true, true]);
     });
@@ -192,13 +192,38 @@ describe("KmChainRegistryV2", function () {
         await expect(c.connect(adminOficina).definirFuncionario(adminOficina.address, false)).to.be.revertedWithCustomError(c, "AdministradorNaoPodeSerDesativado");
     });
 
-    it("DETRAN troca o administrador; o anterior deixa de administrar", async function () {
-        await c.connect(detran).definirAdministrador(idOficina, outro.address);
-        expect((await c.getOrganizacao(idOficina)).administrador).to.equal(outro.address);
-        await expect(c.connect(adminOficina).definirFuncionario(intruso.address, true)).to.be.revertedWithCustomError(c, "ApenasAdministrador");
+    it("DETRAN define mais de um administrador e retira a administracao; nunca fica sem nenhum", async function () {
+        await c.connect(detran).definirAdministrador(idOficina, outro.address, true);
+        expect((await c.getOrganizacao(idOficina)).administradores).to.equal(2);
+        // os dois administram
         await c.connect(outro).definirFuncionario(intruso.address, true);
-        await expect(c.connect(adminOficina).definirAdministrador(idOficina, adminOficina.address)).to.be.revertedWithCustomError(c, "ApenasDetran");
-        await expect(c.connect(detran).definirAdministrador(99, outro.address)).to.be.revertedWithCustomError(c, "OrganizacaoInexistente");
+        await c.connect(adminOficina).definirFuncionario(intruso.address, false);
+        // o funcionario existente tambem pode virar administrador
+        await c.connect(detran).definirAdministrador(idOficina, mecanico.address, true);
+        expect((await c.vinculoDe(mecanico.address)).administrador).to.equal(true);
+
+        // quem deixa de administrar continua vinculado, como funcionario
+        await c.connect(detran).definirAdministrador(idOficina, adminOficina.address, false);
+        const v = await c.vinculoDe(adminOficina.address);
+        expect([v.ativo, v.administrador]).to.deep.equal([true, false]);
+        await expect(c.connect(adminOficina).definirFuncionario(intruso.address, true)).to.be.revertedWithCustomError(c, "ApenasAdministrador");
+
+        await c.connect(detran).definirAdministrador(idOficina, mecanico.address, false);
+        await expect(c.connect(detran).definirAdministrador(idOficina, outro.address, false)).to.be.revertedWithCustomError(c, "OrganizacaoSemAdministrador");
+        await expect(c.connect(detran).definirAdministrador(idOficina, intruso.address, false)).to.be.revertedWithCustomError(c, "CarteiraDeOutraOrganizacao");
+        await expect(c.connect(adminOficina).definirAdministrador(idOficina, adminOficina.address, true)).to.be.revertedWithCustomError(c, "ApenasDetran");
+        await expect(c.connect(detran).definirAdministrador(99, outro.address, true)).to.be.revertedWithCustomError(c, "OrganizacaoInexistente");
+        // administrador de outra organizacao nao e tomado
+        await expect(c.connect(detran).definirAdministrador(idOficina, adminVistoria.address, true)).to.be.revertedWithCustomError(c, "CarteiraDeOutraOrganizacao");
+    });
+
+    it("um administrador nao desativa outro administrador nem a si mesmo", async function () {
+        await c.connect(detran).definirAdministrador(idOficina, outro.address, true);
+        await expect(c.connect(outro).definirFuncionario(adminOficina.address, false)).to.be.revertedWithCustomError(c, "AdministradorNaoPodeSerDesativado");
+        // depois que o DETRAN retira a administracao, o outro administrador pode desativar
+        await c.connect(detran).definirAdministrador(idOficina, adminOficina.address, false);
+        await c.connect(outro).definirFuncionario(adminOficina.address, false);
+        expect((await c.vinculoDe(adminOficina.address)).ativo).to.equal(false);
     });
 
     // --------------------------------------------------------------- correcao

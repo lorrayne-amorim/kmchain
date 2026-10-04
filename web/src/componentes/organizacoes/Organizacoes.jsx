@@ -3,9 +3,7 @@ import { mensagemDeErro } from "../../lib/erros";
 import { rotuloDaOrganizacao } from "../../lib/eventos";
 import { carteiraValida, encurtar } from "../../lib/formato";
 import { SITUACOES, enderecoEmLinha, formatarCnpj } from "../../lib/organizacao";
-import {
-    credenciarOrganizacao, definirCarteiraDaConta, definirSituacaoDaOrganizacao, listarOrganizacoesParaGestao, localizarConta, trocarAdministrador
-} from "../../lib/organizacoes";
+import { credenciarOrganizacao, definirCarteiraDaConta, definirSituacaoDaOrganizacao, listarOrganizacoesParaGestao } from "../../lib/organizacoes";
 import { avisar } from "../../lib/toast";
 import { useMunicipios } from "../../lib/useMunicipios";
 import Aviso from "../../ui/Aviso";
@@ -14,13 +12,22 @@ import Campo from "../../ui/Campo";
 import { Vazio } from "../../ui/Pagina";
 import Tabela from "../../ui/Tabela";
 import { Progresso } from "../../ui/Transacao";
+import Administradores from "./Administradores";
 import Equipe from "./Equipe";
 import FormularioOrganizacao from "./FormularioOrganizacao";
 import MapaOrganizacoes from "./MapaOrganizacoes";
 
+// Quem administra a organizacao, para a lista: os administradores com conta
+// e quantas carteiras ainda aguardam conta; antes do credenciamento, o indicado.
+function administradoresDe(o) {
+    if (o.id_cadeia === null) return o.indicado_nome ?? (o.administrador_carteira ? `Carteira ${encurtar(o.administrador_carteira)}` : "—");
+    const semConta = o.administradores_sem_conta ? `${o.administradores_sem_conta} aguardando conta` : null;
+    return [o.administradores, semConta].filter(Boolean).join(" · ") || "—";
+}
+
 // Gestao das organizacoes pelo DETRAN: cadastrar, credenciar, suspender,
-// reativar, trocar o administrador e consultar a equipe. Credenciamento,
-// situacao e administrador sao gravados no contrato; o cadastro, no banco.
+// reativar, definir administradores e consultar a equipe. Credenciamento,
+// situacao e administradores sao gravados no contrato; o cadastro, no banco.
 export default function Organizacoes({ usuario }) {
     const [modo, setModo] = useState("lista"); // lista | mapa | nova | editar | detalhe
     const [organizacoes, setOrganizacoes] = useState(null);
@@ -106,7 +113,7 @@ export default function Organizacoes({ usuario }) {
                             colunas={[
                                 { titulo: "Organização", render: (o) => <>{o.nome_fantasia}<span className="celula-secundaria">{formatarCnpj(o.cnpj)}</span></> },
                                 { titulo: "Tipo", render: (o) => rotuloDaOrganizacao(o.tipo) },
-                                { titulo: "Administrador", render: (o) => o.administrador_nome ?? "—" },
+                                { titulo: "Administradores", render: administradoresDe },
                                 { titulo: "Funcionários", render: (o) => <span className="numero">{o.funcionarios_ativos}</span> },
                                 { titulo: "Situação", render: situacao },
                                 { titulo: "Ações", classe: "celula-acoes", render: (o) => <Botao variante="fantasma" tamanho="p" onClick={() => abrir(o.id)}>{o.situacao === "pendente" ? "Credenciar" : "Abrir"}</Botao> }
@@ -117,7 +124,7 @@ export default function Organizacoes({ usuario }) {
                                         <span><strong>{o.nome_fantasia}</strong><span className="celula-secundaria">{rotuloDaOrganizacao(o.tipo)}</span></span>
                                         <Botao variante="secundario" tamanho="p" onClick={() => abrir(o.id)}>{o.situacao === "pendente" ? "Credenciar" : "Abrir"}</Botao>
                                     </div>
-                                    <p className="item-movel-linha">{situacao(o)} {o.administrador_nome}</p>
+                                    <p className="item-movel-linha">{situacao(o)} {administradoresDe(o)}</p>
                                 </div>
                             )}
                         />
@@ -131,34 +138,12 @@ export default function Organizacoes({ usuario }) {
 function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoAtualizar }) {
     const [passo, setPasso] = useState(null);
     const [falha, setFalha] = useState("");
-    const [trocando, setTrocando] = useState(false);
-    const [email, setEmail] = useState("");
-    const [erroEmail, setErroEmail] = useState("");
     const [editandoCarteira, setEditandoCarteira] = useState(false);
     const [carteira, setCarteira] = useState("");
     const [erroCarteira, setErroCarteira] = useState("");
+    const [versaoDaEquipe, setVersaoDaEquipe] = useState(0);
     const municipios = useMunicipios();
-
-    // Grava a carteira do administrador. Se a organizacao ja esta
-    // credenciada, o vinculo no contrato e refeito para a carteira nova.
-    async function salvarCarteira(e) {
-        e.preventDefault();
-        setErroCarteira("");
-        const nova = carteira.trim();
-        if (!carteiraValida(nova)) return setErroCarteira("Informe o endereço com 0x e 40 caracteres.");
-        try {
-            await definirCarteiraDaConta(o.administrador_email, nova);
-        } catch (erro) {
-            return setErroCarteira(mensagemDeErro(erro, "Não foi possível gravar a carteira."));
-        }
-        setEditandoCarteira(false);
-        setCarteira("");
-        if (o.id_cadeia === null) {
-            avisar("Carteira do administrador gravada.");
-            return aoAtualizar();
-        }
-        await executar(() => trocarAdministrador(o, nova, setPasso), "Carteira do administrador atualizada no contrato.");
-    }
+    const pendente = o.id_cadeia === null;
 
     // Assina no contrato e recarrega o cadastro espelhado pelo servidor.
     async function executar(operacao, mensagem) {
@@ -174,21 +159,24 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
         }
     }
 
-    async function trocar(e) {
+    // Antes do credenciamento: grava a carteira da conta indicada como administradora.
+    async function salvarCarteiraDoIndicado(e) {
         e.preventDefault();
-        setErroEmail("");
+        setErroCarteira("");
+        const nova = carteira.trim();
+        if (!carteiraValida(nova)) return setErroCarteira("Informe o endereço com 0x e 40 caracteres.");
         try {
-            const conta = await localizarConta(email.trim().toLowerCase(), o.id);
-            await executar(() => trocarAdministrador(o, conta.carteira, setPasso), `${conta.nome} é o novo administrador.`);
-            setTrocando(false);
-            setEmail("");
+            await definirCarteiraDaConta(o.indicado_email, nova);
+            setEditandoCarteira(false);
+            setCarteira("");
+            avisar("Carteira do administrador gravada.");
+            await aoAtualizar();
         } catch (erro) {
-            setErroEmail(mensagemDeErro(erro, "Não foi possível localizar a conta."));
+            setErroCarteira(mensagemDeErro(erro, "Não foi possível gravar a carteira."));
         }
     }
 
     const local = municipios && o.municipio_ibge ? municipios.rotuloDoMunicipio(o.municipio_ibge) : "";
-    const ocupado = Boolean(passo);
 
     return (
         <div className="empilhado">
@@ -205,31 +193,31 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
                     <div><dt>CNPJ</dt><dd className="numero">{formatarCnpj(o.cnpj)}</dd></div>
                     <div><dt>Contato</dt><dd>{o.telefone} · {o.email}</dd></div>
                     <div><dt>Endereço</dt><dd>{enderecoEmLinha(o)}<span className="celula-secundaria">{local} · CEP {o.cep}</span></dd></div>
-                    <div>
-                        <dt>Administrador</dt>
-                        <dd>
-                            {o.administrador_nome ?? "—"}
-                            <span className="celula-secundaria">{o.administrador_email}</span>
-                            <span className="celula-secundaria mono">{o.administrador_carteira ? encurtar(o.administrador_carteira, 8, 6) : "sem carteira"}</span>
-                            {o.administrador_email && !editandoCarteira && (
-                                <Botao variante="fantasma" tamanho="p" onClick={() => setEditandoCarteira(true)}>
-                                    {o.administrador_carteira ? "Trocar carteira" : "Informar carteira"}
-                                </Botao>
-                            )}
-                        </dd>
-                    </div>
+                    {pendente && (
+                        <div>
+                            <dt>Administrador indicado</dt>
+                            <dd>
+                                {o.indicado_nome ?? "Pessoa ainda sem conta: assume ao vincular a carteira"}
+                                <span className="celula-secundaria">{o.indicado_email}</span>
+                                <span className="celula-secundaria mono">{o.administrador_carteira ? encurtar(o.administrador_carteira, 8, 6) : "sem carteira"}</span>
+                                {o.indicado_email && !editandoCarteira && (
+                                    <Botao variante="fantasma" tamanho="p" onClick={() => setEditandoCarteira(true)}>
+                                        {o.administrador_carteira ? "Trocar carteira" : "Informar carteira"}
+                                    </Botao>
+                                )}
+                            </dd>
+                        </div>
+                    )}
                     <div>
                         <dt>Identificador em cadeia</dt>
                         <dd>{o.id_cadeia ?? "Ainda não credenciada"}{o.credenciada_em && <span className="celula-secundaria">credenciada em {new Date(o.credenciada_em).toLocaleDateString("pt-BR")}</span>}</dd>
                     </div>
                 </dl>
 
-                {editandoCarteira && !passo && (
-                    <form className="busca-linha" onSubmit={salvarCarteira} noValidate>
+                {editandoCarteira && (
+                    <form className="busca-linha" onSubmit={salvarCarteiraDoIndicado} noValidate>
                         <Campo rotulo="Carteira do administrador" erro={erroCarteira}
-                            ajuda={erroCarteira ? undefined : (o.id_cadeia === null
-                                ? "O credenciamento será assinado para esta carteira."
-                                : "Você assina em seguida a troca no contrato. A carteira anterior continua vinculada à organização, como funcionário.")}>
+                            ajuda={erroCarteira ? undefined : "O credenciamento será assinado para esta carteira."}>
                             <input className="mono" value={carteira} placeholder="0x…" autoComplete="off" spellCheck={false}
                                 onChange={(e) => setCarteira(e.target.value)} />
                         </Campo>
@@ -238,7 +226,7 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
                     </form>
                 )}
 
-                {o.situacao === "pendente" && (
+                {pendente && (
                     <Aviso tipo="info" titulo="Credenciamento pendente">
                         {o.credenciamento
                             ? "O cadastro está salvo. Assine o credenciamento para a organização passar a registrar eventos."
@@ -247,9 +235,9 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
                 )}
                 {falha && <Aviso tipo="erro">{falha}</Aviso>}
 
-                {ocupado ? <Progresso passo={passo} /> : (
+                {passo ? <Progresso passo={passo} /> : (
                     <div className="acoes">
-                        {o.situacao === "pendente" && o.credenciamento && (
+                        {pendente && o.credenciamento && (
                             <Botao icone="check" onClick={() => executar(() => credenciarOrganizacao(o, setPasso), "Organização credenciada.")}>
                                 Assinar credenciamento
                             </Botao>
@@ -263,26 +251,20 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
                         {o.situacao === "suspensa" && (
                             <Botao onClick={() => executar(() => definirSituacaoDaOrganizacao(o, true, setPasso), "Organização reativada.")}>Reativar</Botao>
                         )}
-                        {o.id_cadeia !== null && <Botao variante="secundario" onClick={() => setTrocando((v) => !v)}>Trocar administrador</Botao>}
                         <Botao variante="secundario" onClick={aoEditar}>Editar cadastro</Botao>
                     </div>
                 )}
                 {o.situacao === "ativa" && (
                     <p className="campo-ajuda">Suspender impede novos registros da organização. Os eventos já registrados continuam no histórico.</p>
                 )}
-
-                {trocando && !ocupado && (
-                    <form className="busca-linha" onSubmit={trocar} noValidate>
-                        <Campo rotulo="E-mail da conta do novo administrador" erro={erroEmail}
-                            ajuda={erroEmail ? undefined : "O administrador atual continua na equipe, como funcionário."}>
-                            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-                        </Campo>
-                        <Botao type="submit">Assinar troca</Botao>
-                    </form>
-                )}
             </section>
 
-            {o.id_cadeia !== null && <Equipe key={o.administrador_id} organizacaoId={o.id} usuario={usuario} />}
+            {!pendente && (
+                <>
+                    <Administradores organizacao={o} aoAlterar={() => { setVersaoDaEquipe((v) => v + 1); aoAtualizar(); }} />
+                    <Equipe key={versaoDaEquipe} organizacaoId={o.id} usuario={usuario} />
+                </>
+            )}
         </div>
     );
 }

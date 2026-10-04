@@ -20,8 +20,9 @@ pragma solidity ^0.8.24;
 ///   - REFERENCIA a outro evento do mesmo veiculo, usada na correcao;
 ///   - hash SHA-256 do comprovante, quando houver.
 ///
-/// O contrato tambem mantem o cadastro minimo das organizacoes (tipo, situacao
-/// e administrador) e o vinculo de cada carteira. A organizacao de um evento
+/// O contrato tambem mantem o cadastro minimo das organizacoes (tipo e
+/// situacao) e o vinculo de cada carteira, que diz a que organizacao ela
+/// pertence e se a administra. Uma organizacao pode ter varios administradores. A organizacao de um evento
 /// vem do vinculo de quem assina, nunca de um parametro declarado, e so
 /// registra quem esta ativo numa organizacao ativa. Por isso todo evento
 /// gravado prova que o credenciamento valia naquele momento.
@@ -47,17 +48,17 @@ contract KmChainRegistryV2 {
     uint64 public constant ATRASO_MAXIMO = 30 days;
 
     // --------------------------------------------------------------- structs
-    // Um slot: 8 + 8 + 64 + 160 = 240 bits.
     struct Organizacao {
         uint8   tipo;
         bool    ativa;
         uint64  credenciadaEm;
-        address administrador;
+        uint32  administradores;  // quantas carteiras administram a organizacao
     }
 
     struct Vinculo {
         uint32 organizacao;
         bool   ativo;
+        bool   administrador;
     }
 
     // Slot 1: km | dataEvento | dataBloco | municipio | tipo | atipica
@@ -110,7 +111,7 @@ contract KmChainRegistryV2 {
     event LeituraCorrigida(bytes32 indexed chave, uint256 indiceOriginal, uint256 indiceCorrecao);
     event OrganizacaoCredenciada(uint32 indexed organizacao, uint8 tipo);
     event SituacaoDaOrganizacaoAlterada(uint32 indexed organizacao, bool ativa);
-    event AdministradorDefinido(uint32 indexed organizacao, address indexed administrador);
+    event AdministradorDefinido(uint32 indexed organizacao, address indexed carteira, bool administrador);
     event FuncionarioDefinido(uint32 indexed organizacao, address indexed carteira, bool ativo);
     event TiposPermitidosAlterados(uint8 indexed tipoOrganizacao, uint256 tipos);
 
@@ -134,6 +135,7 @@ contract KmChainRegistryV2 {
     error CarteiraInvalida();
     error CarteiraDeOutraOrganizacao(address carteira, uint32 organizacao);
     error AdministradorNaoPodeSerDesativado();
+    error OrganizacaoSemAdministrador();
     error DetranNaoPodeSerSuspenso();
 
     constructor(address anterior) {
@@ -145,10 +147,10 @@ contract KmChainRegistryV2 {
             tipo: uint8(TipoOrganizacao.DETRAN),
             ativa: true,
             credenciadaEm: uint64(block.timestamp),
-            administrador: address(0)
+            administradores: 0
         });
         emit OrganizacaoCredenciada(ORGANIZACAO_DETRAN, uint8(TipoOrganizacao.DETRAN));
-        _definirAdministrador(ORGANIZACAO_DETRAN, msg.sender);
+        _tornarAdministrador(ORGANIZACAO_DETRAN, msg.sender);
 
         // Matriz inicial (codigos em web/src/lib/eventos.js). Ajustavel pelo DETRAN.
         _permitir(TipoOrganizacao.DETRAN,     _faixa(2, 3));
@@ -199,7 +201,7 @@ contract KmChainRegistryV2 {
     }
 
     // ---------------------------------------------------------- organizacoes
-    /// @notice Credencia uma organizacao e define o seu administrador.
+    /// @notice Credencia uma organizacao e define o seu primeiro administrador.
     function credenciarOrganizacao(TipoOrganizacao tipo, address administrador)
         external
         apenasDetran
@@ -211,10 +213,10 @@ contract KmChainRegistryV2 {
             tipo: uint8(tipo),
             ativa: true,
             credenciadaEm: uint64(block.timestamp),
-            administrador: address(0)
+            administradores: 0
         });
         emit OrganizacaoCredenciada(organizacao, uint8(tipo));
-        _definirAdministrador(organizacao, administrador);
+        _tornarAdministrador(organizacao, administrador);
     }
 
     /// @notice Suspende ou reativa uma organizacao. Os eventos ja registrados permanecem.
@@ -225,26 +227,36 @@ contract KmChainRegistryV2 {
         emit SituacaoDaOrganizacaoAlterada(organizacao, ativa);
     }
 
-    /// @notice Troca o administrador. O anterior continua como funcionario.
-    function definirAdministrador(uint32 organizacao, address novo) external apenasDetran {
+    /// @notice Da ou retira de uma carteira a administracao de uma organizacao.
+    ///         Quem deixa de administrar continua vinculado, como funcionario.
+    ///         A organizacao nunca fica sem administrador.
+    function definirAdministrador(uint32 organizacao, address carteira, bool administrador) external apenasDetran {
         _exigirOrganizacao(organizacao);
-        _definirAdministrador(organizacao, novo);
+        if (administrador) {
+            _tornarAdministrador(organizacao, carteira);
+            return;
+        }
+        Vinculo storage v = _vinculos[carteira];
+        if (v.organizacao != organizacao || !v.administrador) revert CarteiraDeOutraOrganizacao(carteira, v.organizacao);
+        if (_organizacoes[organizacao].administradores == 1) revert OrganizacaoSemAdministrador();
+        v.administrador = false;
+        _organizacoes[organizacao].administradores -= 1;
+        emit AdministradorDefinido(organizacao, carteira, false);
     }
 
     /// @notice Vincula ou desativa um funcionario da organizacao de quem assina.
     function definirFuncionario(address carteira, bool ativo) external {
         Vinculo storage meu = _vinculos[msg.sender];
         uint32 organizacao = meu.organizacao;
-        if (!meu.ativo || _organizacoes[organizacao].administrador != msg.sender) {
-            revert ApenasAdministrador(msg.sender);
-        }
+        if (!meu.ativo || !meu.administrador) revert ApenasAdministrador(msg.sender);
         if (ativo) {
             _vincular(organizacao, carteira);
             return;
         }
-        if (carteira == msg.sender) revert AdministradorNaoPodeSerDesativado();
         Vinculo storage v = _vinculos[carteira];
         if (v.organizacao != organizacao) revert CarteiraDeOutraOrganizacao(carteira, v.organizacao);
+        // Um administrador so sai depois que o DETRAN retira a administracao dele.
+        if (v.administrador) revert AdministradorNaoPodeSerDesativado();
         v.ativo = false;
         emit FuncionarioDefinido(organizacao, carteira, false);
     }
@@ -253,10 +265,13 @@ contract KmChainRegistryV2 {
         if (_organizacoes[organizacao].tipo == uint8(TipoOrganizacao.NENHUM)) revert OrganizacaoInexistente(organizacao);
     }
 
-    function _definirAdministrador(uint32 organizacao, address novo) private {
-        _vincular(organizacao, novo);
-        _organizacoes[organizacao].administrador = novo;
-        emit AdministradorDefinido(organizacao, novo);
+    function _tornarAdministrador(uint32 organizacao, address carteira) private {
+        _vincular(organizacao, carteira);
+        Vinculo storage v = _vinculos[carteira];
+        if (v.administrador) return;
+        v.administrador = true;
+        _organizacoes[organizacao].administradores += 1;
+        emit AdministradorDefinido(organizacao, carteira, true);
     }
 
     // Uma carteira pertence a uma organizacao por vez.
@@ -471,6 +486,6 @@ contract KmChainRegistryV2 {
     {
         Vinculo storage v = _vinculos[carteira];
         Organizacao storage o = _organizacoes[v.organizacao];
-        return (v.organizacao, o.tipo, o.ativa, v.ativo, v.ativo && o.administrador == carteira);
+        return (v.organizacao, o.tipo, o.ativa, v.ativo, v.ativo && v.administrador);
     }
 }

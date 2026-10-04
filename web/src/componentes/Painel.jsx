@@ -303,15 +303,15 @@ function EtapasAcesso({ acesso }) {
                     <div>
                         <p className="etapa-titulo">Vínculo com a organização</p>
                         {!conta && (
-                            <p className="etapa-texto">O DETRAN credencia a organização e define o administrador; o administrador vincula os funcionários.</p>
+                            <p className="etapa-texto">O DETRAN credencia a organização e define os administradores; cada administrador vincula os funcionários.</p>
                         )}
                         {conta && verificando && <p className="etapa-texto">Verificando o vínculo desta carteira…</p>}
                         {conta && !verificando && (
                             <>
                                 <p className="etapa-texto">
                                     Esta carteira ainda não está vinculada a uma organização. Vincule-a à sua conta e
-                                    informe o seu e-mail ao administrador da sua organização. Se você é o
-                                    administrador indicado, informe-o ao DETRAN.
+                                    informe o seu e-mail ou o endereço da carteira ao administrador da sua
+                                    organização. Se você é o administrador indicado, informe-os ao DETRAN.
                                 </p>
                                 <p className="carteira-destaque">
                                     <span className="mono quebra">{usuario.email}</span>

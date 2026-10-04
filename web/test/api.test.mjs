@@ -283,8 +283,8 @@ describe("organizações: cadastro e credenciamento pelo DETRAN", () => {
         const o = organizacoes.oficina;
         assert.equal(o.situacao, "ativa");
         assert.equal(o.id_cadeia, 2);
-        const emCadeia = await cadeia.contrato.getOrganizacao(o.id_cadeia);
-        assert.equal(emCadeia.administrador.toLowerCase(), contas.oficina.carteira);
+        const emCadeia = await cadeia.contrato.vinculoDe(contas.oficina.carteira);
+        assert.deepEqual([Number(emCadeia.organizacao), emCadeia.administrador], [o.id_cadeia, true]);
         const membro = (await bd("SELECT papel, ativo FROM membros WHERE organizacao_id = $1 AND usuario_id = $2", [o.id, contas.oficina.id])).rows[0];
         assert.deepEqual([membro.papel, membro.ativo], ["administrador", true]);
         const acoes = await acoesDaAuditoria();
@@ -391,21 +391,36 @@ describe("organizações: cadastro e credenciamento pelo DETRAN", () => {
         assert.ok((await acoesDaAuditoria()).includes("organizacao_reativada"));
     });
 
-    test("troca de administrador pelo DETRAN: espelhada no banco, com auditoria", async () => {
+    test("DETRAN define mais de um administrador e retira a administração; o banco acompanha, com auditoria", async () => {
         const o = (await bd("SELECT id, id_cadeia FROM organizacoes WHERE nome_fantasia = 'Oficina Suspensa'")).rows[0];
+        const papeis = async () => Object.fromEntries((await bd("SELECT usuario_id, papel FROM membros WHERE organizacao_id = $1 AND ativo", [o.id])).rows.map((l) => [l.usuario_id, l.papel]));
+        const espelhar = (quem, carteira) => pedir("funcionarios/sincronizar", quem, { carteira });
+
         const localizada = await pedir("contas/localizar", contas.detran, { email: contas.semVinculo.email, organizacaoId: o.id });
         assert.equal(localizada.status, 200);
-        await (await como(1).definirAdministrador(o.id_cadeia, localizada.corpo.conta.carteira)).wait();
-        const r = await pedir("organizacoes/sincronizar", contas.detran, { id: o.id });
-        assert.equal(r.corpo.organizacao.administrador_id, contas.semVinculo.id);
-        const papeis = (await bd("SELECT usuario_id, papel FROM membros WHERE organizacao_id = $1", [o.id])).rows;
-        assert.equal(papeis.find((p) => p.usuario_id === contas.semVinculo.id).papel, "administrador");
-        assert.equal(papeis.find((p) => p.usuario_id === contas.suspensa.id).papel, "funcionario");
-        assert.ok((await acoesDaAuditoria()).includes("administrador_alterado"));
+        await (await como(1).definirAdministrador(o.id_cadeia, localizada.corpo.conta.carteira, true)).wait();
+        // a propria organizacao nao espelha o que o DETRAN definiu em outra; o DETRAN, sim
+        assert.equal((await espelhar(contas.oficina, contas.semVinculo.carteira)).corpo.codigo, "outra_organizacao");
+        const r = await espelhar(contas.detran, contas.semVinculo.carteira);
+        assert.deepEqual([r.status, r.corpo.funcionario.papel], [200, "administrador"]);
+        assert.deepEqual(await papeis(), { [contas.suspensa.id]: "administrador", [contas.semVinculo.id]: "administrador" });
+        const gestao = (await obter("organizacoes/gestao", contas.detran)).corpo.organizacoes.find((x) => x.id === o.id);
+        assert.equal(gestao.administradores, "Sem Vinculo Teste, Suspensa Teste");
+
+        // retirar a administracao: a pessoa continua na equipe, como funcionario
+        await (await como(1).definirAdministrador(o.id_cadeia, contas.suspensa.carteira, false)).wait();
+        assert.equal((await espelhar(contas.detran, contas.suspensa.carteira)).corpo.funcionario.papel, "funcionario");
+        assert.deepEqual(await papeis(), { [contas.suspensa.id]: "funcionario", [contas.semVinculo.id]: "administrador" });
+        assert.ok((await acoesDaAuditoria()).includes("administrador_removido"));
+        // o ultimo administrador nao pode ser retirado
+        await assert.rejects(como(1).definirAdministrador.staticCall(o.id_cadeia, contas.semVinculo.carteira, false));
+
         // devolve a carteira "sem vinculo" ao estado inicial para os demais testes
-        await (await como(1).definirAdministrador(o.id_cadeia, contas.suspensa.carteira)).wait();
+        await (await como(1).definirAdministrador(o.id_cadeia, contas.suspensa.carteira, true)).wait();
+        await (await como(1).definirAdministrador(o.id_cadeia, contas.semVinculo.carteira, false)).wait();
         await (await como(8).definirFuncionario(contas.semVinculo.carteira, false)).wait();
-        await pedir("organizacoes/sincronizar", contas.detran, { id: o.id });
+        await espelhar(contas.detran, contas.suspensa.carteira);
+        assert.equal((await espelhar(contas.suspensa, contas.semVinculo.carteira)).corpo.funcionario.ativo, false);
     });
 
     test("DETRAN informa a carteira de uma conta: só ele, sem repetir carteira, com auditoria", async () => {
@@ -444,17 +459,87 @@ describe("organizações: cadastro e credenciamento pelo DETRAN", () => {
 
     test("troca da carteira do administrador de organização credenciada: contrato e equipe acompanham", async () => {
         const o = (await bd("SELECT id, id_cadeia FROM organizacoes WHERE nome_fantasia = 'Oficina Suspensa'")).rows[0];
+        const antiga = contas.suspensa.carteira;
         const nova = Wallet.createRandom().address;
         assert.equal((await pedir("contas/carteira", contas.detran, { email: contas.suspensa.email, carteira: nova })).status, 200);
         // ate o DETRAN assinar a troca, a conta fica sem vinculo ativo no contrato
         assert.equal((await obter("eventos", contas.suspensa)).corpo.codigo, "sem_vinculo");
 
-        await (await como(1).definirAdministrador(o.id_cadeia, nova)).wait();
-        const r = await pedir("organizacoes/sincronizar", contas.detran, { id: o.id });
-        assert.equal(r.corpo.organizacao.administrador_id, contas.suspensa.id);
+        // a carteira nova passa a administrar e a antiga deixa de administrar
+        await (await como(1).definirAdministrador(o.id_cadeia, nova, true)).wait();
+        await (await como(1).definirAdministrador(o.id_cadeia, antiga, false)).wait();
+        const r = await pedir("funcionarios/sincronizar", contas.detran, { carteira: nova });
+        assert.deepEqual([r.corpo.funcionario.papel, r.corpo.funcionario.email], ["administrador", contas.suspensa.email]);
+        await pedir("funcionarios/sincronizar", contas.detran, { carteira: antiga });
+
         const membro = (await bd("SELECT carteira, papel, ativo FROM membros WHERE organizacao_id = $1 AND usuario_id = $2", [o.id, contas.suspensa.id])).rows[0];
         assert.deepEqual([membro.carteira, membro.papel, membro.ativo], [nova.toLowerCase(), "administrador", true]);
         assert.equal((await obter("eventos", contas.suspensa)).status, 200);
+        // a carteira antiga segue vinculada no contrato, agora sem conta
+        const equipe = (await obter(`funcionarios?organizacao=${o.id}`, contas.detran)).corpo;
+        assert.deepEqual(equipe.aguardando.map((a) => [a.carteira, a.papel]), [[antiga, "funcionario"]]);
+    });
+
+    test("credenciamento só pela carteira: a pessoa cria a conta depois e, ao vincular a carteira, já tem a organização e o papel", async () => {
+        const dados = dadosDaOrganizacao("SEGURADORA", "Seguradora Pela Carteira", contas.semCarteira, "990001110001");
+        delete dados.administradorEmail;
+        const semNada = await pedir("organizacoes", contas.admin, dados);
+        assert.equal(semNada.status, 400);
+        assert.ok(semNada.corpo.campos.carteira && semNada.corpo.campos.email);
+        const ocupada = await pedir("organizacoes", contas.admin, { ...dados, administradorCarteira: contas.vistoria.carteira });
+        assert.equal(ocupada.corpo.codigo, "conta_em_outra_organizacao");
+
+        // carteira de alguem que ainda nao tem conta no KMChain
+        const pessoa = Wallet.createRandom();
+        const criada = await pedir("organizacoes", contas.admin, { ...dados, administradorCarteira: pessoa.address });
+        assert.equal(criada.status, 201, JSON.stringify(criada.corpo));
+        assert.equal(criada.corpo.credenciamento.administrador, pessoa.address.toLowerCase());
+        assert.equal(criada.corpo.organizacao.administrador_id, null);
+        const tx = await (await como(0).credenciarOrganizacao(criada.corpo.credenciamento.tipo, pessoa.address)).wait();
+        const confirmada = await pedir("organizacoes/credenciamento", contas.admin, { id: criada.corpo.organizacao.id, txHash: tx.hash });
+        assert.equal(confirmada.status, 201, JSON.stringify(confirmada.corpo));
+        const id = confirmada.corpo.organizacao.id;
+
+        // enquanto nao ha conta, a carteira aparece como aguardando
+        const antes = (await obter(`funcionarios?organizacao=${id}`, contas.detran)).corpo;
+        assert.deepEqual([antes.funcionarios.length, antes.aguardando.map((a) => [a.carteira, a.papel])], [0, [[pessoa.address.toLowerCase(), "administrador"]]]);
+
+        // a pessoa cria a conta e vincula a carteira, provando a posse por assinatura
+        const conta = await pedir("auth/cadastrar", null, { nome: "Gerente Pela Carteira", email: "gerente.carteira@exemplo.test", senha: "senha-de-teste" });
+        const nova = { id: conta.corpo.usuario.id, nome: "Gerente Pela Carteira", email: "gerente.carteira@exemplo.test" };
+        assert.equal((await obter("auth/eu", nova)).corpo.organizacao, null);
+        const emitidoEm = Date.now();
+        const assinatura = await pessoa.signMessage(mensagemVinculo(pessoa.address, nova.email, emitidoEm));
+        assert.equal((await pedir("auth/vincular-carteira", nova, { carteira: pessoa.address, emitidoEm, assinatura })).status, 200);
+
+        const sessao = (await obter("auth/eu", nova)).corpo;
+        assert.equal(sessao.organizacao.nome_fantasia, "Seguradora Pela Carteira");
+        assert.deepEqual([sessao.vinculo.ativo, sessao.vinculo.administrador], [true, true]);
+        const depois = (await obter("funcionarios", nova)).corpo;
+        assert.deepEqual(depois.funcionarios.map((f) => [f.email, f.papel]), [[nova.email, "administrador"]]);
+        assert.equal(depois.aguardando.length, 0);
+    });
+
+    test("funcionário vinculado só pela carteira: aguarda a conta e entra na equipe quando ela vincula a carteira", async () => {
+        const pessoa = Wallet.createRandom();
+        await (await como(4).definirFuncionario(pessoa.address, true)).wait();
+        const r = await pedir("funcionarios/sincronizar", contas.vistoria, { carteira: pessoa.address });
+        assert.deepEqual([r.status, r.corpo.funcionario.semConta, r.corpo.funcionario.papel], [200, true, "funcionario"]);
+        assert.deepEqual((await obter("funcionarios", contas.vistoria)).corpo.aguardando.map((a) => a.carteira), [pessoa.address.toLowerCase()]);
+
+        const criada = await bd("INSERT INTO usuarios (nome, email, senha_hash) VALUES ('Vistoriador Novo', 'vistoriador.novo@exemplo.test', 'x') RETURNING id");
+        const nova = { id: criada.rows[0].id, nome: "Vistoriador Novo", email: "vistoriador.novo@exemplo.test" };
+        const emitidoEm = Date.now();
+        const assinatura = await pessoa.signMessage(mensagemVinculo(pessoa.address, nova.email, emitidoEm));
+        await pedir("auth/vincular-carteira", nova, { carteira: pessoa.address, emitidoEm, assinatura });
+        assert.equal((await obter("auth/eu", nova)).corpo.organizacao.nome_fantasia, "Vistoria XYZ");
+
+        const equipe = (await obter("funcionarios", contas.vistoria)).corpo;
+        assert.ok(equipe.funcionarios.some((f) => f.email === nova.email && f.papel === "funcionario"));
+        assert.equal(equipe.aguardando.length, 0);
+        // sai da equipe ativa para nao interferir nos demais testes
+        await (await como(4).definirFuncionario(pessoa.address, false)).wait();
+        await pedir("funcionarios/sincronizar", contas.vistoria, { carteira: pessoa.address });
     });
 });
 
@@ -1158,7 +1243,9 @@ describe("dados complementares do veículo (off-chain)", () => {
     const consultar = async (quem) => pedir("veiculo/dados-complementares", quem, {
         chassi: CHASSI, ...(await assinar(quem.i, (t) => mensagemDadosComplementares(CHASSI, quem.email, t)))
     });
-    const agoraIso = () => new Date().toISOString();
+    // O relogio da blockchain de teste anda a frente do da maquina (um segundo
+    // por bloco); a data da mudanca usa o dela, para nao ficar antes do cadastro.
+    const agoraIso = async () => new Date((await agoraCadeia()) * 1000).toISOString();
 
     test("consulta: só DETRAN; devolve identificação, datados e quem registrou cada evento", async () => {
         assert.equal((await consultar(contas.oficina)).status, 403);
@@ -1173,8 +1260,8 @@ describe("dados complementares do veículo (off-chain)", () => {
     });
 
     test("nova placa e nova UF entram como linhas novas; as anteriores continuam", async () => {
-        assert.equal((await alterar(contas.detran, "placa", { placa: "XYZ9A99", vigenteDesde: agoraIso() })).status, 201);
-        assert.equal((await alterar(contas.detran, "uf", { uf: "SP", vigenteDesde: agoraIso() })).status, 201);
+        assert.equal((await alterar(contas.detran, "placa", { placa: "XYZ9A99", vigenteDesde: await agoraIso() })).status, 201);
+        assert.equal((await alterar(contas.detran, "uf", { uf: "SP", vigenteDesde: await agoraIso() })).status, 201);
         const placas = (await bd("SELECT placa, origem FROM veiculo_placas WHERE chassi = $1 ORDER BY vigente_desde", [CHASSI])).rows;
         assert.deepEqual(placas.map((p) => [p.placa, p.origem]), [["ABC1D23", "cadastro"], ["XYZ9A99", "alteracao"]]);
         const ufs = (await bd("SELECT uf FROM veiculo_ufs WHERE chassi = $1 ORDER BY vigente_desde", [CHASSI])).rows;
@@ -1182,7 +1269,7 @@ describe("dados complementares do veículo (off-chain)", () => {
     });
 
     test("novo proprietário por alteração cadastral; histórico preservado", async () => {
-        const r = await alterar(contas.detran, "proprietario", { nomeProprietario: "Terceiro Ficticio", cpfProprietario: cpfFicticio("111444777"), vigenteDesde: agoraIso() });
+        const r = await alterar(contas.detran, "proprietario", { nomeProprietario: "Terceiro Ficticio", cpfProprietario: cpfFicticio("111444777"), vigenteDesde: await agoraIso() });
         assert.equal(r.status, 201);
         const donos = (await bd("SELECT nome FROM veiculo_proprietarios WHERE chassi = $1 ORDER BY vigente_desde", [CHASSI])).rows;
         assert.deepEqual(donos.map((d) => d.nome), ["Proprietario Ficticio", "Novo Ficticio", "Terceiro Ficticio"]);
@@ -1192,9 +1279,9 @@ describe("dados complementares do veículo (off-chain)", () => {
         const antes = await alterar(contas.detran, "placa", { placa: "QWE1R23", vigenteDesde: "2000-01-01T00:00:00Z" });
         assert.equal(antes.status, 400);
         assert.equal(antes.corpo.codigo, "data_anterior");
-        assert.equal((await alterar(contas.detran, "uf", { uf: "ZZ", vigenteDesde: agoraIso() })).status, 400);
-        assert.equal((await alterar(contas.detran, "placa", { placa: "123", vigenteDesde: agoraIso() })).status, 400);
-        assert.equal((await alterar(contas.oficina, "placa", { placa: "QWE1R23", vigenteDesde: agoraIso() })).status, 403);
+        assert.equal((await alterar(contas.detran, "uf", { uf: "ZZ", vigenteDesde: await agoraIso() })).status, 400);
+        assert.equal((await alterar(contas.detran, "placa", { placa: "123", vigenteDesde: await agoraIso() })).status, 400);
+        assert.equal((await alterar(contas.oficina, "placa", { placa: "QWE1R23", vigenteDesde: await agoraIso() })).status, 403);
         assert.equal((await alterar(contas.detran, "km", {})).status, 400);
         assert.equal((await bd("SELECT count(*)::int AS n FROM veiculo_placas WHERE chassi = $1", [CHASSI])).rows[0].n, 2);
     });
@@ -1322,12 +1409,12 @@ describe("auditoria administrativa", () => {
         const acoes = new Set(r.corpo.registros.map((l) => l.acao));
         for (const acao of [
             "organizacao_criada", "organizacao_credenciada", "organizacao_suspensa", "organizacao_reativada", "organizacao_alterada",
-            "administrador_definido", "administrador_alterado", "funcionario_cadastrado", "funcionario_desativado",
+            "administrador_definido", "administrador_removido", "funcionario_cadastrado", "funcionario_desativado",
             "correcao_solicitada", "correcao_aprovada", "correcao_rejeitada"
         ]) assert.ok(acoes.has(acao), acao);
         const solicitada = r.corpo.registros.find((l) => l.acao === "correcao_solicitada");
         assert.deepEqual([solicitada.usuario_nome, solicitada.organizacao_nome], ["Mecanico Teste", "Oficina ABC"]);
-        assert.doesNotMatch(JSON.stringify(r.corpo), /cpf|\d{11}/i);
+        assert.doesNotMatch(JSON.stringify(r.corpo), /cpf|"\d{11}"/i);
 
         const filtrado = await obter("auditoria?acao=correcao_aprovada", contas.detran);
         assert.ok(filtrado.corpo.registros.length >= 1);

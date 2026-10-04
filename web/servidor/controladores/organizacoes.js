@@ -3,7 +3,7 @@ import { bd } from "../nucleo/banco.js";
 import { ErroHttp, parametro } from "../nucleo/http.js";
 import { buscarOrganizacao } from "../repositorios/organizacoes.js";
 import { SO_DETRAN, ehDetran, exigirMembro, exigirMembroComAssinatura } from "../servicos/autorizacao.js";
-import { listarFuncionarios, sincronizarFuncionario } from "../servicos/funcionarios.js";
+import { listarFuncionarios, sincronizarVinculo } from "../servicos/funcionarios.js";
 import * as servico from "../servicos/organizacoes.js";
 import { mensagemContas } from "../../src/lib/mensagens.js";
 
@@ -40,7 +40,7 @@ export async function confirmarCredenciamento(req, res) {
     res.status(r.jaCredenciada ? 200 : 201).json(r);
 }
 
-// POST /api/organizacoes/sincronizar: espelha situacao e administrador do contrato.
+// POST /api/organizacoes/sincronizar: espelha a situacao (ativa ou suspensa) do contrato.
 export async function sincronizar(req, res) {
     const acesso = await exigirMembro(req, { tipos: SO_DETRAN });
     res.status(200).json({ organizacao: await servico.sincronizarOrganizacaoComContrato(req.body?.id, acesso) });
@@ -88,8 +88,9 @@ export async function listarEquipe(req, res) {
 }
 
 // POST /api/funcionarios/sincronizar: espelha o vinculo de uma carteira
-// depois que o administrador o alterou no contrato.
+// depois de alterado no contrato (pelo administrador, na propria
+// organizacao, ou pelo DETRAN, ao definir administradores).
 export async function sincronizarEquipe(req, res) {
-    const acesso = await exigirMembro(req, { administrador: true });
-    res.status(200).json({ funcionario: await sincronizarFuncionario(req.body?.carteira, acesso) });
+    const acesso = await exigirMembro(req);
+    res.status(200).json({ funcionario: await sincronizarVinculo(req.body?.carteira, acesso) });
 }

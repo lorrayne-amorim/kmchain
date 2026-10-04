@@ -290,6 +290,19 @@ const MIGRACAO = `
         UNIQUE (organizacao_id, usuario_id)
     );
 
+    -- Carteira do administrador indicado no cadastro: e para ela que o
+    -- credenciamento e assinado, tenha a pessoa conta ou nao.
+    ALTER TABLE organizacoes ADD COLUMN IF NOT EXISTS administrador_carteira TEXT;
+
+    -- Carteiras ja vinculadas a uma organizacao no contrato cuja pessoa ainda
+    -- nao criou conta. Quando a conta vincula a carteira, a linha vira membro.
+    CREATE TABLE IF NOT EXISTS vinculos_sem_conta (
+        carteira        TEXT PRIMARY KEY,
+        organizacao_id  INTEGER NOT NULL REFERENCES organizacoes(id),
+        papel           TEXT NOT NULL CHECK (papel IN ('administrador', 'funcionario')),
+        criado_em       TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     -- O que o contrato v2 guarda de cada evento, espelhado para listagens, e
     -- o que so existe aqui (seguradora contratante, justificativa).
     ALTER TABLE eventos ADD COLUMN IF NOT EXISTS contrato TEXT NOT NULL DEFAULT 'v1';

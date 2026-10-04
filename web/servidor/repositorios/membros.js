@@ -34,6 +34,23 @@ export async function salvarMembro({ organizacaoId, usuarioId, carteira, papel, 
     return anterior;
 }
 
+export const buscarVinculoSemConta = async (carteira) =>
+    primeira(await bd("SELECT * FROM vinculos_sem_conta WHERE carteira = lower($1)", [carteira]));
+
+export const salvarVinculoSemConta = (carteira, organizacaoId, papel) => bd(
+    `INSERT INTO vinculos_sem_conta (carteira, organizacao_id, papel) VALUES (lower($1), $2, $3)
+     ON CONFLICT (carteira) DO UPDATE SET organizacao_id = EXCLUDED.organizacao_id, papel = EXCLUDED.papel`,
+    [carteira, organizacaoId, papel]
+);
+
+export const removerVinculoSemConta = (carteira) =>
+    bd("DELETE FROM vinculos_sem_conta WHERE carteira = lower($1)", [carteira]);
+
+export async function listarVinculosSemConta(organizacaoId) {
+    const r = await bd("SELECT carteira, papel, criado_em FROM vinculos_sem_conta WHERE organizacao_id = $1 ORDER BY criado_em", [organizacaoId]);
+    return r.rows;
+}
+
 export async function listarMembros(organizacaoId) {
     const r = await bd(
         `SELECT m.id, m.papel, m.ativo, m.carteira, m.vinculado_em, m.desativado_em, u.nome, u.email

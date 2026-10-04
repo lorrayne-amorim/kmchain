@@ -8,9 +8,10 @@
 import { contrato, naRede, transacaoConfirmada } from "../nucleo/cadeia.js";
 import { ErroHttp } from "../nucleo/http.js";
 import * as organizacoes from "../repositorios/organizacoes.js";
-import { buscarContaPorCarteira, buscarContaPorEmail, buscarMembro, definirCarteira, salvarMembro } from "../repositorios/membros.js";
+import { buscarContaPorCarteira, buscarContaPorEmail, definirCarteira } from "../repositorios/membros.js";
 import { ACOES, registrarAuditoria } from "./auditoria.js";
 import { vinculoDaCarteira } from "./autorizacao.js";
+import { espelharVinculo } from "./funcionarios.js";
 import { organizacaoPorChave } from "../../src/lib/eventos.js";
 import { municipioValido } from "../../src/lib/municipios.js";
 import { problemasDaOrganizacao } from "../../src/lib/organizacao.js";
@@ -74,6 +75,7 @@ export async function definirCarteiraDaConta(email, carteira, acesso) {
         if (erro?.code === "23505") throw emUso;
         throw erro;
     }
+    await organizacoes.definirCarteiraDoIndicado(conta.id, carteira);
     await registrarAuditoria(ACOES.CARTEIRA_DEFINIDA, acesso, { tipo: "usuario", id: conta.id }, {
         funcionario: conta.nome, organizacao: conta.carteira ? "carteira trocada" : "carteira informada"
     });
@@ -104,21 +106,44 @@ export async function cadastrarOrganizacao(corpo, acesso) {
     if (await organizacoes.buscarOrganizacaoPorCnpj(dados.cnpj)) {
         throw new ErroHttp(409, "cnpj_ja_cadastrado", "Já existe uma organização com este CNPJ.", { campos: { cnpj: "CNPJ já cadastrado." } });
     }
-    // A carteira do administrador pode vir junto, informada pelo DETRAN.
-    if (corpo.administradorCarteira) await definirCarteiraDaConta(corpo.administradorEmail, corpo.administradorCarteira, acesso);
-    const { conta } = await localizarContaParaVinculo(corpo.administradorEmail);
+    const administrador = await administradorIndicado(corpo, acesso);
 
-    const organizacao = await organizacoes.inserirOrganizacao({ ...dados, administradorId: conta.id }, acesso.usuario.id);
+    const organizacao = await organizacoes.inserirOrganizacao({ ...dados, ...administrador }, acesso.usuario.id);
     await registrarAuditoria(ACOES.ORGANIZACAO_CRIADA, acesso, { tipo: "organizacao", id: organizacao.id }, {
         nome: organizacao.nome_fantasia, tipo: organizacao.tipo
     });
-    return { organizacao, credenciamento: dadosDoCredenciamento(organizacao, conta) };
+    return { organizacao, credenciamento: dadosDoCredenciamento(organizacao) };
 }
 
-const dadosDoCredenciamento = (organizacao, administrador) => ({
+// Primeiro administrador da organizacao, indicado pelo DETRAN de um de dois
+// jeitos: pelo e-mail de uma conta (com a carteira dela, ou a que o DETRAN
+// informar), ou so pela carteira, quando a pessoa ainda nao tem conta. Nesse
+// caso a conta assume o vinculo ao vincular a carteira, com assinatura.
+async function administradorIndicado(corpo, acesso) {
+    const email = String(corpo.administradorEmail ?? "").trim();
+    const carteira = String(corpo.administradorCarteira ?? "").trim();
+    if (email) {
+        if (carteira) await definirCarteiraDaConta(email, carteira, acesso);
+        const { conta } = await localizarContaParaVinculo(email);
+        return { administradorId: conta.id, administradorCarteira: conta.carteira };
+    }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(carteira)) {
+        throw new ErroHttp(400, "dados_invalidos", "Informe o e-mail da conta ou a carteira do administrador.", {
+            campos: { email: "Informe o e-mail da conta ou a carteira.", carteira: "Informe o endereço com 0x e 40 caracteres." }
+        });
+    }
+    if ((await vinculoDaCarteira(carteira)).ativo) {
+        throw new ErroHttp(409, "conta_em_outra_organizacao", "Esta carteira já tem vínculo ativo com outra organização.", { campos: { carteira: "Já vinculada a outra organização." } });
+    }
+    const conta = await buscarContaPorCarteira(carteira);
+    return { administradorId: conta?.id ?? null, administradorCarteira: carteira.toLowerCase() };
+}
+
+// O que o DETRAN assina para credenciar: o tipo e a carteira do administrador.
+const dadosDoCredenciamento = (organizacao) => (organizacao.administrador_carteira ? {
     tipo: organizacaoPorChave(organizacao.tipo).codigo,
-    administrador: administrador.carteira
-});
+    administrador: organizacao.administrador_carteira
+} : null);
 
 // Confere a transacao de credenciamento e ativa a organizacao no banco com
 // o identificador que o contrato atribuiu.
@@ -137,25 +162,23 @@ export async function confirmarCredenciamento(id, txHash, acesso) {
         throw new ErroHttp(409, "transacao_ja_usada", "Esta transação já credenciou outra organização.");
     }
 
+    // O credenciamento tem de ser o do cadastro: mesmo tipo, e a carteira
+    // indicada como administradora da organizacao criada.
     const emCadeia = await naRede(contrato().getOrganizacao(idCadeia));
-    const administrador = await buscarContaPorCarteira(emCadeia.administrador);
-    if (Number(emCadeia.tipo) !== organizacaoPorChave(organizacao.tipo).codigo || administrador?.id !== organizacao.administrador_id) {
+    const vinculo = organizacao.administrador_carteira ? await vinculoDaCarteira(organizacao.administrador_carteira) : null;
+    if (Number(emCadeia.tipo) !== organizacaoPorChave(organizacao.tipo).codigo || vinculo?.organizacao !== idCadeia || !vinculo.administrador) {
         throw new ErroHttp(422, "credenciamento_nao_confere", "O tipo ou o administrador gravados em cadeia não conferem com o cadastro.");
     }
 
     await organizacoes.marcarCredenciada(organizacao.id, idCadeia, tx, registradoEm);
-    await salvarMembro({
-        organizacaoId: organizacao.id, usuarioId: administrador.id, carteira: administrador.carteira,
-        papel: "administrador", ativo: true
-    });
-    const alvo = { tipo: "organizacao", id: organizacao.id };
-    await registrarAuditoria(ACOES.ORGANIZACAO_CREDENCIADA, acesso, alvo, { nome: organizacao.nome_fantasia, idCadeia, tx });
-    await registrarAuditoria(ACOES.ADMINISTRADOR_DEFINIDO, acesso, alvo, { administrador: administrador.nome });
-    return { organizacao: await organizacoes.buscarOrganizacao(organizacao.id), jaCredenciada: false };
+    const credenciada = await organizacoes.buscarOrganizacao(organizacao.id);
+    await registrarAuditoria(ACOES.ORGANIZACAO_CREDENCIADA, acesso, { tipo: "organizacao", id: organizacao.id }, { nome: organizacao.nome_fantasia, idCadeia, tx });
+    await espelharVinculo(organizacao.administrador_carteira, vinculo, credenciada, acesso);
+    return { organizacao: credenciada, jaCredenciada: false };
 }
 
-// Espelha no banco a situacao e o administrador que o contrato mostra agora.
-// Chamado depois que o DETRAN suspende, reativa ou troca o administrador.
+// Espelha no banco a situacao que o contrato mostra agora. Chamado depois
+// que o DETRAN suspende ou reativa a organizacao.
 export async function sincronizarOrganizacaoComContrato(id, acesso) {
     const organizacao = await organizacoes.buscarOrganizacao(Number(id));
     if (!organizacao || organizacao.id_cadeia === null) {
@@ -171,35 +194,6 @@ export async function sincronizarOrganizacaoComContrato(id, acesso) {
             emCadeia.ativa ? ACOES.ORGANIZACAO_REATIVADA : ACOES.ORGANIZACAO_SUSPENSA,
             acesso, alvo, { nome: organizacao.nome_fantasia }
         );
-    }
-
-    const administrador = await buscarContaPorCarteira(emCadeia.administrador);
-    if (administrador && administrador.id === organizacao.administrador_id) {
-        // Mesma pessoa: so a carteira dela pode ter mudado.
-        await salvarMembro({
-            organizacaoId: organizacao.id, usuarioId: administrador.id, carteira: administrador.carteira,
-            papel: "administrador", ativo: true
-        });
-    }
-    if (administrador && administrador.id !== organizacao.administrador_id) {
-        // O administrador anterior continua vinculado, como funcionario.
-        if (organizacao.administrador_id) {
-            const anterior = await buscarMembro(organizacao.id, organizacao.administrador_id);
-            if (anterior) {
-                await salvarMembro({
-                    organizacaoId: organizacao.id, usuarioId: anterior.usuario_id, carteira: anterior.carteira,
-                    papel: "funcionario", ativo: anterior.ativo
-                });
-            }
-        }
-        await salvarMembro({
-            organizacaoId: organizacao.id, usuarioId: administrador.id, carteira: administrador.carteira,
-            papel: "administrador", ativo: true
-        });
-        await organizacoes.definirAdministrador(organizacao.id, administrador.id);
-        await registrarAuditoria(ACOES.ADMINISTRADOR_ALTERADO, acesso, alvo, {
-            nome: organizacao.nome_fantasia, administrador: administrador.nome
-        });
     }
     return organizacoes.buscarOrganizacao(organizacao.id);
 }
@@ -224,10 +218,5 @@ export const listarOrganizacoesPublicas = organizacoes.listarOrganizacoesPublica
 // Lista para a gestao do DETRAN; as pendentes levam o que falta assinar.
 export async function listarOrganizacoesParaGestao() {
     const lista = await organizacoes.listarOrganizacoesCompletas();
-    return lista.map((o) => ({
-        ...o,
-        credenciamento: o.situacao === "pendente" && o.administrador_carteira
-            ? dadosDoCredenciamento(o, { carteira: o.administrador_carteira })
-            : null
-    }));
+    return lista.map((o) => ({ ...o, credenciamento: o.situacao === "pendente" ? dadosDoCredenciamento(o) : null }));
 }
