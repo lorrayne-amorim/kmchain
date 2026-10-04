@@ -714,6 +714,7 @@ O DETRAN não abre solicitação porque corrige de ofício.
 - a lista pública expõe o endereço das organizações;
 - o IPFS é público e permanente; o arquivo cifrado não pode ser apagado com garantia;
 - o dígito verificador do chassi não é conferido;
+- o identificador do veículo é o chassi, pela chave derivada dele. A remarcação que preserva o número não afeta o histórico, porque a chave continua a mesma. A substituição do identificador não é tratada: um chassi diferente gera outra chave, sem ligação com o histórico anterior, e o chassi não pode ser corrigido depois do cadastro;
 - conformidade com a LGPD não foi avaliada.
 
 ---
@@ -726,6 +727,7 @@ O DETRAN não abre solicitação porque corrige de ofício.
 | Hash separado do usuário em cadeia | a carteira que assina já identifica o usuário e é provada por assinatura |
 | Organização solicitante e seguradora contratante em cadeia | mantidas no banco para não ampliar o contrato |
 | Etapas separadas "aprovar" e "efetivar" | a aprovação só é gravada quando a correção está em cadeia |
+| Vínculo entre o histórico de um chassi e o de um chassi que o substitua, e anotação de chassi remarcado | exigiria um evento institucional novo no contrato (novo deploy); o caso comum, de remarcação com o mesmo número, já funciona |
 | Mapa dos locais dos eventos de um veículo | existe a lista cronológica |
 | Conferência, no servidor, do município contra as coordenadas | exigiria base de limites municipais ou serviço externo no servidor; a tela só sugere a cidade |
 | Verificação de localização no cadastro e na correção | atos do DETRAN, que não tem coordenadas cadastradas |
@@ -755,6 +757,7 @@ O DETRAN não abre solicitação porque corrige de ofício.
 - Compromisso com sal para o hash do comprovante.
 - Mapa dos locais dos eventos na consulta.
 - Convite de funcionário por e-mail, em vez de exigir conta prévia.
+- Evento institucional do DETRAN que vincule a chave de um chassi substituído à chave nova, preservando a continuidade do histórico, e anotação de chassi remarcado no cadastro do veículo.
 - Catálogo de modelos por marca.
 - Avaliação jurídica de proteção de dados.
 
