@@ -7,11 +7,22 @@ const REVERTS = {
     VeiculoJaCadastrado: "Este chassi já está cadastrado.",
     VeiculoNaoCadastrado: "Não encontramos um veículo com esse chassi.",
     QuilometragemRegressiva: "A quilometragem informada é menor que a última registrada.",
-    EntidadeNaoAutorizada: "Esta carteira não tem permissão para registrar leituras.",
-    AccessControlUnauthorizedAccount: "Você não possui permissão para realizar esta ação.",
-    ChassiInvalido: "Confira o chassi informado. Ele deve ter 17 caracteres.",
-    IndiceInvalido: "A leitura selecionada não existe no histórico.",
-    LeituraJaContestada: "Esta leitura já foi corrigida."
+    DataDoEventoInvalida: "A data do evento não pode estar no futuro, ter mais de 30 dias nem ser anterior ao último evento do veículo.",
+    MunicipioInvalido: "Escolha o município em que o evento ocorreu.",
+    SemVinculoAtivo: "Esta carteira não tem vínculo ativo com uma organização credenciada.",
+    OrganizacaoInativa: "O credenciamento da sua organização está suspenso.",
+    OrganizacaoInexistente: "Organização não encontrada no contrato.",
+    ApenasDetran: "Apenas o DETRAN pode realizar esta ação.",
+    ApenasAdministrador: "Apenas o administrador da organização pode realizar esta ação.",
+    TipoNaoPermitido: "Sua organização não registra este tipo de evento.",
+    TipoDeOrganizacaoInvalido: "Tipo de organização inválido.",
+    CarteiraInvalida: "Endereço de carteira inválido.",
+    CarteiraDeOutraOrganizacao: "Esta carteira pertence a outra organização.",
+    AdministradorNaoPodeSerDesativado: "O administrador não pode ser desativado. Peça ao DETRAN para definir outro administrador.",
+    DetranNaoPodeSerSuspenso: "O DETRAN não pode ser suspenso.",
+    ChaveInvalida: "Confira o chassi informado. Ele deve ter 17 caracteres.",
+    IndiceInvalido: "O registro selecionado não existe no histórico.",
+    LeituraJaCorrigida: "Este registro já foi corrigido."
 };
 
 const TECNICO = /0x[0-9a-f]{8}|revert|execution|call exception|missing|json|rpc|undefined|null|fetch|ECONN|ENOTFOUND|relation|column|syntax|\(/i;

@@ -1,5 +1,5 @@
 // Ambiente de teste de integracao das rotas /api, sem servico externo real:
-//   - blockchain: no Hardhat local com o contrato implantado do zero;
+//   - blockchain: no Hardhat local com o KmChainRegistryV2 implantado do zero;
 //   - banco: Postgres em memoria (PGlite), com a mesma migracao do _db.js;
 //   - IPFS/Pinata: simulado aqui, guardando os envios em memoria.
 // Todos os dados sao ficticios (contas publicas de teste do Hardhat,
@@ -10,7 +10,7 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
-import { ContractFactory, JsonRpcProvider, NonceManager, Wallet } from "ethers";
+import { ContractFactory, JsonRpcProvider, NonceManager, Wallet, ZeroAddress } from "ethers";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const pastaContratos = path.join(aqui, "..", "..", "contratos");
@@ -23,7 +23,11 @@ export const CHAVES = [
     "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
     "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
     "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
-    "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba"
+    "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+    "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
+    "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
+    "0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
+    "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
 ];
 
 let no;
@@ -45,16 +49,14 @@ export async function iniciarBlockchain() {
     const provedor = new JsonRpcProvider(rpc, undefined, { staticNetwork: true, cacheTimeout: -1 });
     const carteiras = CHAVES.map((k) => new NonceManager(new Wallet(k, provedor)));
 
-    const artefato = JSON.parse(readFileSync(
-        path.join(pastaContratos, "artifacts", "contracts", "KmChainRegistry.sol", "KmChainRegistry.json"), "utf8"
-    ));
-    const fabrica = new ContractFactory(artefato.abi, artefato.bytecode, carteiras[0]);
-    const contrato = await fabrica.deploy();
+    // A carteira 0 implanta o contrato e vira a administradora do DETRAN.
+    const artefato = lerArtefato("KmChainRegistryV2.sol", "KmChainRegistryV2");
+    const contrato = await new ContractFactory(artefato.abi, artefato.bytecode, carteiras[0]).deploy(ZeroAddress);
     await contrato.waitForDeployment();
 
     process.env.RPC_URL = rpc;
     process.env.KMCHAIN_ENDERECO = await contrato.getAddress();
-    return { provedor, carteiras, contrato, abi: artefato.abi, bytecode: artefato.bytecode };
+    return { provedor, carteiras, contrato };
 }
 
 // Artefato compilado de um contrato (ex.: o auxiliar de teste de conta inteligente).
@@ -126,9 +128,12 @@ export function configurarSegredos() {
     process.env.DOCS_KEY = randomBytes(32).toString("base64");
 }
 
-// Chama um handler como a Vercel chamaria e devolve a resposta.
-export async function chamar(handler, { metodo = "POST", corpo, cookie, url = "/api/teste" } = {}) {
-    const req = { method: metodo, headers: cookie ? { cookie } : {}, body: corpo, url };
+// Chama uma rota /api como a Vercel chamaria e devolve a resposta.
+// `rota` e o caminho sem "/api/", com a query string se houver.
+let rotear;
+export async function chamar(rota, { metodo = "POST", corpo, cookie } = {}) {
+    rotear ??= (await import("../servidor/rotas.js")).rotear;
+    const req = { method: metodo, headers: cookie ? { cookie } : {}, body: corpo, url: `/api/${rota}` };
     return new Promise((resolve, reject) => {
         const cabecalhos = {};
         const res = {
@@ -138,7 +143,7 @@ export async function chamar(handler, { metodo = "POST", corpo, cookie, url = "/
             json(dados) { resolve({ status: this.statusCode, corpo: dados, cabecalhos }); },
             send(dados) { resolve({ status: this.statusCode, corpo: dados, cabecalhos }); }
         };
-        Promise.resolve(handler(req, res)).catch(reject);
+        Promise.resolve(rotear(req, res)).catch(reject);
     });
 }
 
@@ -149,6 +154,17 @@ export function cpfFicticio(base = "123456789") {
         for (let i = 0; i < b.length; i++) soma += Number(b[i]) * (b.length + 1 - i);
         const resto = (soma * 10) % 11;
         return resto === 10 ? 0 : resto;
+    };
+    const d1 = digito(base);
+    return base + d1 + digito(base + d1);
+}
+
+// CNPJ ficticio com digitos verificadores validos.
+export function cnpjFicticio(base = "112223330001") {
+    const digito = (b) => {
+        const pesos = b.length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+        const resto = b.split("").reduce((soma, d, i) => soma + Number(d) * pesos[i], 0) % 11;
+        return resto < 2 ? 0 : 11 - resto;
     };
     const d1 = digito(base);
     return base + d1 + digito(base + d1);

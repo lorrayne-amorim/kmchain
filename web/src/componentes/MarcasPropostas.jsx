@@ -5,8 +5,8 @@ import { avisar } from "../lib/toast";
 import Aviso from "../ui/Aviso";
 import Botao from "../ui/Botao";
 
-// Exclusivo do admin: marcas propostas no cadastro que ainda nao estao na
-// lista. Aprovar a torna uma marca da lista; recusar impede novas propostas
+// Exclusivo do administrador do DETRAN: marcas propostas no cadastro que
+// ainda nao estao na lista. Aprovar a torna uma marca da lista; recusar impede novas propostas
 // com o mesmo nome. Veiculos ja cadastrados mantem o nome da epoca.
 export default function MarcasPropostas() {
     const [pendentes, setPendentes] = useState(null);

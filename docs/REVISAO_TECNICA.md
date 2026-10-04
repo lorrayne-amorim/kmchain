@@ -1,3 +1,5 @@
+> **Documento histórico.** Descreve o sistema em 27/09/2026, com o contrato v1 e a proposta de v2 daquela data. O estado atual está em [INVENTARIO_FUNCIONAL.md](INVENTARIO_FUNCIONAL.md).
+
 # KmChain: revisão técnica, funcional, de privacidade e acadêmica
 
 Estado em 27/09/2026. Contrato em uso: `KmChainRegistry` (v1) na Sepolia, `0x8BcAB5232FFa571B802ac444E5Aba43f7333c49C`.

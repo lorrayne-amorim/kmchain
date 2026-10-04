@@ -91,20 +91,18 @@ export function problemasDosAnos(anoFabricacao, anoModelo, agora = new Date()) {
     return erros;
 }
 
-// Data e hora em que o hodometro foi observado: nao pode estar no futuro e
-// nao pode ter mais de 30 dias (mesma janela proposta para o contrato v2).
+// Data e hora do EVENTO (quando a vistoria, revisao etc. aconteceu): nao pode
+// estar no futuro e nao pode ter mais de 30 dias (mesma janela do contrato).
+// E diferente da data da transacao, que e a do bloco em que o registro entrou.
 export const ATRASO_MAXIMO_MS = 30 * 24 * 60 * 60 * 1000;
 const FOLGA_RELOGIO_MS = 5 * 60 * 1000;
-export function problemaDaObservacao(valor, referencia = Date.now()) {
+export function problemaDaDataDoEvento(valor, referencia = Date.now()) {
     const instante = new Date(valor).getTime();
-    if (!valor || Number.isNaN(instante)) return "Informe a data e a hora em que o hodômetro foi observado.";
-    if (instante > referencia + FOLGA_RELOGIO_MS) return "A observação não pode estar no futuro.";
-    if (instante < referencia - ATRASO_MAXIMO_MS) return "A observação precisa ter no máximo 30 dias.";
+    if (!valor || Number.isNaN(instante)) return "Informe a data e a hora em que o evento ocorreu.";
+    if (instante > referencia + FOLGA_RELOGIO_MS) return "A data do evento não pode estar no futuro.";
+    if (instante < referencia - ATRASO_MAXIMO_MS) return "O evento precisa ter ocorrido há no máximo 30 dias.";
     return "";
 }
-
-// O contrato em uso (v1) guarda um unico texto de modelo; a marca vai junto.
-export const modeloEmCadeia = (marcaNome, modelo) => `${limparNome(marcaNome)} ${limparNome(modelo)}`;
 
 export function problemasDoProprietario(nome, cpf) {
     const erros = {};
@@ -125,8 +123,9 @@ export function problemasDoCadastro(d, agora = new Date()) {
     Object.assign(erros, problemasDosAnos(d.anoFabricacao, d.anoModelo, agora));
     if (!ufValida(d.uf)) erros.uf = "Escolha a UF de registro na data do cadastro.";
     if (!/^\d+$/.test(String(d.kmInicial ?? ""))) erros.kmInicial = "Informe a quilometragem observada.";
-    const obs = problemaDaObservacao(d.observadaEm, agora.getTime());
-    if (obs) erros.observadaEm = obs;
+    const data = problemaDaDataDoEvento(d.dataEvento, agora.getTime());
+    if (data) erros.dataEvento = data;
+    if (!/^\d{7}$/.test(String(d.municipio ?? ""))) erros.municipio = "Escolha a UF e a cidade do evento.";
     Object.assign(erros, problemasDoProprietario(d.nomeProprietario, d.cpfProprietario));
     return erros;
 }

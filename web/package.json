@@ -8,13 +8,18 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node --test --test-concurrency=1 \"test/*.test.mjs\""
+    "test": "node --test --test-concurrency=1 \"test/*.test.mjs\"",
+    "demo:local": "node scripts/ambienteLocal.mjs",
+    "demo:preparar": "node scripts/prepararDemonstracao.mjs",
+    "demo:carteiras": "node scripts/criarCarteiras.mjs",
+    "demo:resetar": "node scripts/resetarDadosDeDemonstracao.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "bs58": "^6.0.0",
     "ethers": "^6.17.0",
     "html5-qrcode": "^2.3.8",
+    "leaflet": "^1.9.4",
     "pg": "^8.13.1",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",

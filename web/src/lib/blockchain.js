@@ -1,19 +1,28 @@
 import { BrowserProvider, Contract, JsonRpcProvider } from "ethers";
-import abi from "./KmChainRegistry.abi.json";
-import { endereco } from "./endereco.json";
+import abi from "./KmChainRegistryV2.abi.json";
+import enderecos from "./endereco.json";
 
 const CHAIN_ID = BigInt(import.meta.env.VITE_CHAIN_ID);
 const CHAIN_ID_HEX = "0x" + CHAIN_ID.toString(16); // 0xaa36a7 para a Sepolia
 
+// O endereco vem do deploy (scripts/deploy.js grava endereco.json); o
+// ambiente local de demonstracao informa o do no Hardhat pela variavel.
+const ENDERECO = import.meta.env.VITE_KMCHAIN_ENDERECO || enderecos.endereco;
+export const contratoImplantado = Boolean(ENDERECO);
+
+let provedorLeitura;
+const provedorPublico = () => (provedorLeitura ??= new JsonRpcProvider(import.meta.env.VITE_RPC_URL));
+
 // Consulta publica: funciona sem MetaMask e sem carteira, de graca.
 export function contratoLeitura() {
-    const provedor = new JsonRpcProvider(import.meta.env.VITE_RPC_URL);
-    return new Contract(endereco, abi, provedor);
+    if (!contratoImplantado) throw new Error("O contrato do KMChain ainda não foi implantado nesta rede.");
+    return new Contract(ENDERECO, abi, provedorPublico());
 }
 
-// Escrita: exige carteira credenciada e rede Sepolia.
+// Escrita: exige a carteira de quem registra e a rede Sepolia.
 export async function contratoEscrita() {
-    if (!window.ethereum) throw new Error("Instale a MetaMask para registrar leituras.");
+    if (!window.ethereum) throw new Error("Instale a MetaMask para registrar eventos.");
+    if (!contratoImplantado) throw new Error("O contrato do KMChain ainda não foi implantado nesta rede.");
 
     await window.ethereum.request({ method: "eth_requestAccounts" });
     let provedor = new BrowserProvider(window.ethereum);
@@ -28,7 +37,7 @@ export async function contratoEscrita() {
     }
 
     const assinante = await provedor.getSigner();
-    return new Contract(endereco, abi, assinante);
+    return new Contract(ENDERECO, abi, assinante);
 }
 
 export const linkTransacao = (hash) => `${import.meta.env.VITE_EXPLORER}/tx/${hash}`;
@@ -47,50 +56,19 @@ export async function contaConectada() {
     return contas[0] ?? null;
 }
 
-// Le em cadeia quais papeis (DETRAN, vistoria, oficina) a conta possui.
-// Define o que aparece no menu: sem carteira credenciada, so a consulta publica.
-//
-// "admin" e separado de "detran": quem credencia oficinas e vistorias e quem
-// tem DEFAULT_ADMIN_ROLE (o dono do contrato), nao qualquer conta DETRAN_ROLE
-// - o contrato nunca redefine o admin desses papeis, entao so o deploy tem.
-export async function papeisDaConta(endereco) {
-    if (!endereco) return { admin: false, detran: false, vistoria: false, oficina: false };
-    const papeis = await papeisDasContas([endereco]);
-    return papeis[endereco.toLowerCase()];
-}
+export const SEM_VINCULO = { organizacao: 0, tipo: 0, organizacaoAtiva: false, ativo: false, administrador: false };
 
-// Mesma leitura para varias carteiras de uma vez (ex.: as entidades que
-// assinaram o historico de um veiculo). Devolve { enderecoMinusculo: papeis }.
-// Reflete as funcoes ATUAIS de cada carteira, nao as da epoca do registro.
-export async function papeisDasContas(enderecos) {
-    const unicos = [...new Set(enderecos.filter(Boolean).map((e) => e.toLowerCase()))];
-    if (unicos.length === 0) return {};
-
-    const contrato = contratoLeitura();
-    const [adminRole, detranRole, vistoriaRole, oficinaRole] = await Promise.all([
-        contrato.DEFAULT_ADMIN_ROLE(),
-        contrato.DETRAN_ROLE(),
-        contrato.VISTORIA_ROLE(),
-        contrato.OFICINA_ROLE()
-    ]);
-
-    const resultado = {};
-    await Promise.all(unicos.map(async (endereco) => {
-        const [admin, detran, vistoria, oficina] = await Promise.all([
-            contrato.hasRole(adminRole, endereco),
-            contrato.hasRole(detranRole, endereco),
-            contrato.hasRole(vistoriaRole, endereco),
-            contrato.hasRole(oficinaRole, endereco)
-        ]);
-        resultado[endereco] = { admin, detran, vistoria, oficina };
-    }));
-    return resultado;
-}
-
-// Concede ou revoga OFICINA_ROLE/VISTORIA_ROLE/DETRAN_ROLE a um endereco.
-// So funciona se quem assina tiver DEFAULT_ADMIN_ROLE.
-export async function definirPapel(nomeDoPapel, endereco, conceder) {
-    const papel = await contratoLeitura()[nomeDoPapel]();
-    const contrato = await contratoEscrita();
-    return conceder ? contrato.grantRole(papel, endereco) : contrato.revokeRole(papel, endereco);
+// Le do contrato a que organizacao a carteira pertence, o tipo dela e se a
+// carteira a administra. E o que define as secoes do painel; o servidor
+// confere o mesmo vinculo em cada rota.
+export async function vinculoDaCarteira(endereco) {
+    if (!endereco || !contratoImplantado) return SEM_VINCULO;
+    const v = await contratoLeitura().vinculoDe(endereco);
+    return {
+        organizacao: Number(v.organizacao),
+        tipo: Number(v.tipo),
+        organizacaoAtiva: v.organizacaoAtiva,
+        ativo: v.ativo,
+        administrador: v.administrador
+    };
 }

@@ -1,6 +1,6 @@
-// Login/senha: a segunda camada de acesso ao painel profissional, na frente
+// Login/senha: a primeira camada de acesso ao painel institucional, na frente
 // da carteira. Fica so aqui - o cookie de sessao e HttpOnly, o front nunca
-// le nem guarda o token, so reage ao {usuario} que cada rota devolve.
+// le nem guarda o token, so reage ao que cada rota devolve.
 import { BrowserProvider } from "ethers";
 import { chamarApi } from "./api";
 import { mensagemVinculo } from "./mensagens";
@@ -16,11 +16,13 @@ export async function sair() {
     await fetch("/api/auth/eu", { method: "DELETE", credentials: "same-origin" });
 }
 
-export async function usuarioLogado() {
+// { usuario, vinculo, organizacao }: quem esta logado e, se a carteira da
+// conta tem vinculo ativo no contrato, a organizacao a que ela pertence.
+export async function sessaoAtual() {
     const resposta = await fetch("/api/auth/eu", { credentials: "same-origin" });
-    if (!resposta.ok) return null;
-    const { usuario } = await resposta.json();
-    return usuario;
+    if (!resposta.ok) return { usuario: null, organizacao: null };
+    const { usuario = null, organizacao = null } = await resposta.json();
+    return { usuario, organizacao };
 }
 
 // Assina uma mensagem com a carteira ja conectada para provar que ela

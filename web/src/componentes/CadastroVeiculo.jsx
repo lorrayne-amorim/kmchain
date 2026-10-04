@@ -1,41 +1,48 @@
 import { useEffect, useState } from "react";
 import { contratoLeitura, contratoEscrita } from "../lib/blockchain";
+import { chaveDoChassi } from "../lib/chassi";
 import { enviarDocumento } from "../lib/documentos";
 import { mensagemDeErro } from "../lib/erros";
 import { focarPrimeiroErro } from "../lib/foco";
-import { HASH_VAZIO, agoraLocal, dataHora, encurtar, formatarCpf, km, localParaIso, normalizarChassi, validarChassi } from "../lib/formato";
+import { HASH_VAZIO, agoraLocal, dataHora, encurtar, formatarCpf, km, localParaIso, localParaSegundos, normalizarChassi, validarChassi } from "../lib/formato";
 import { LISTA_INICIAL, carregarMarcas } from "../lib/marcas";
-import { registrarPrivado, validarCadastro } from "../lib/privado";
+import { conferirCadastro, registrarComplemento } from "../lib/registros";
 import { avisar } from "../lib/toast";
+import { useMunicipios } from "../lib/useMunicipios";
 import { UFS, problemasDoCadastro } from "../lib/veiculo";
 import Aviso from "../ui/Aviso";
 import Botao from "../ui/Botao";
 import Campo, { CampoArquivo } from "../ui/Campo";
 import Icone from "../ui/Icone";
 import SeletorMarca from "../ui/SeletorMarca";
+import SeletorMunicipio from "../ui/SeletorMunicipio";
 import { Concluido, Progresso } from "../ui/Transacao";
-import PrivadoPendente from "./PrivadoPendente";
+import ComplementoPendente from "./ComplementoPendente";
 
 const VAZIO = {
     chassi: "", placa: "", marca: null, modelo: "", anoFabricacao: "", anoModelo: "", uf: "",
-    kmInicial: "", observadaEm: "", nomeProprietario: "", cpfProprietario: ""
+    kmInicial: "", dataEvento: "", municipio: "", nomeProprietario: "", cpfProprietario: ""
 };
 
-// Exclusivo do DETRAN. Cria o veiculo em cadeia com sua primeira leitura e
-// guarda no banco privado a identificacao completa e as informacoes datadas
-// (placa, UF de registro e proprietario na data do cadastro).
-export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
-    const [dados, setDados] = useState(() => ({ ...VAZIO, observadaEm: agoraLocal() }));
+// Exclusivo do DETRAN. Cria o veiculo em cadeia com o seu primeiro evento
+// (quilometragem, data e local) e guarda no banco do KMChain a identificacao
+// e as informacoes datadas: placa, UF de registro e proprietario.
+export default function CadastroVeiculo({ acesso, aoVerHistorico }) {
+    const { usuario, conta, organizacao } = acesso;
+    const municipioPadrao = organizacao?.municipio_ibge ? String(organizacao.municipio_ibge) : "";
+    const novoFormulario = () => ({ ...VAZIO, dataEvento: agoraLocal(), municipio: municipioPadrao });
+
+    const [dados, setDados] = useState(novoFormulario);
     const [marcas, setMarcas] = useState(LISTA_INICIAL);
     const [arquivo, setArquivo] = useState(null);
     const [erros, setErros] = useState({});
 
     const [etapa, setEtapa] = useState("formulario"); // formulario | revisao | enviando | concluido
     const [verificando, setVerificando] = useState(false);
-    const [emCadeia, setEmCadeia] = useState(null); // { modelo, ano } conferidos pelo servidor
     const [passo, setPasso] = useState(null);
     const [falha, setFalha] = useState("");
     const [concluido, setConcluido] = useState(null);
+    const municipios = useMunicipios();
 
     // Marcas propostas (pendentes ou aprovadas) chegam do servidor; ate la,
     // vale a lista-base.
@@ -48,7 +55,7 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
         setErros((e) => ({ ...e, [campo]: undefined }));
     };
 
-    // O que vai para o servidor (validacao previa e registro privado).
+    // O que vai para o servidor (validacao previa e dados complementares).
     const payload = () => ({
         chassi: dados.chassi,
         placa: dados.placa,
@@ -58,7 +65,8 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
         anoModelo: dados.anoModelo,
         uf: dados.uf,
         kmInicial: dados.kmInicial,
-        observadaEm: localParaIso(dados.observadaEm),
+        dataEvento: localParaIso(dados.dataEvento),
+        municipio: dados.municipio,
         nomeProprietario: dados.nomeProprietario,
         cpfProprietario: dados.cpfProprietario
     });
@@ -67,7 +75,7 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
         e.preventDefault();
         setFalha("");
 
-        const novos = problemasDoCadastro({ ...dados, observadaEm: localParaIso(dados.observadaEm) });
+        const novos = problemasDoCadastro({ ...dados, dataEvento: localParaIso(dados.dataEvento) });
         const problemaChassi = validarChassi(dados.chassi);
         if (problemaChassi) novos.chassi = problemaChassi;
         setErros(novos);
@@ -75,11 +83,10 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
 
         setVerificando(true);
         try {
-            const veiculo = await contratoLeitura().getVeiculo(dados.chassi);
+            const veiculo = await contratoLeitura().getVeiculo(chaveDoChassi(dados.chassi));
             if (veiculo.cadastrado) return setErros({ chassi: "Este chassi já está cadastrado." });
-            // O servidor confere tudo antes da assinatura e diz o que vai em cadeia.
-            const r = await validarCadastro(payload());
-            setEmCadeia(r.emCadeia);
+            // O servidor confere tudo antes da assinatura.
+            await conferirCadastro(payload());
             setEtapa("revisao");
             window.scrollTo(0, 0);
         } catch (erro) {
@@ -106,22 +113,24 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
 
             setPasso("assinatura");
             const contrato = await contratoEscrita();
-            const tx = await contrato.cadastrarVeiculo(dados.chassi, emCadeia.modelo, emCadeia.ano, BigInt(dados.kmInicial), hash);
+            const tx = await contrato.cadastrarVeiculo(
+                chaveDoChassi(dados.chassi), BigInt(dados.kmInicial), localParaSegundos(dados.dataEvento), Number(dados.municipio), hash
+            );
 
             setPasso("confirmacao");
             const recibo = await tx.wait();
 
-            // Identificacao completa, placa, UF e proprietario: so no banco
-            // privado. O servidor confere a transacao antes de gravar.
-            const dadosPrivados = { txHash: tx.hash, ...payload() };
-            let privadoFalhou = null;
+            // Identificacao, placa, UF e proprietario: so no banco do KMChain.
+            // O servidor confere a transacao antes de gravar.
+            const dadosComplementares = { txHash: tx.hash, ...payload() };
+            let complementoFalhou = null;
             try {
-                await registrarPrivado(dadosPrivados);
-            } catch (erroPrivado) {
-                privadoFalhou = mensagemDeErro(erroPrivado, "");
+                await registrarComplemento(dadosComplementares);
+            } catch (erroComplemento) {
+                complementoFalhou = mensagemDeErro(erroComplemento, "");
             }
 
-            setConcluido({ recibo: { hash: tx.hash, gas: recibo.gasUsed.toString() }, privadoFalhou, dadosPrivados, ...dados });
+            setConcluido({ recibo: { hash: tx.hash, gas: recibo.gasUsed.toString() }, complementoFalhou, dadosComplementares, ...dados });
             setEtapa("concluido");
             avisar("Veículo cadastrado.");
         } catch (erro) {
@@ -133,16 +142,16 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
     }
 
     function novoCadastro() {
-        setDados({ ...VAZIO, observadaEm: agoraLocal() });
+        setDados(novoFormulario());
         setArquivo(null);
         setErros({});
         setConcluido(null);
-        setEmCadeia(null);
         setEtapa("formulario");
     }
 
     const nomeUf = (sigla) => UFS.find(([s]) => s === sigla)?.[1] ?? sigla;
-    const entidade = (
+    const local = municipios && dados.municipio ? municipios.rotuloDoMunicipio(dados.municipio) : "";
+    const responsavel = (
         <>
             {usuario?.nome}
             <span className="celula-secundaria"><span className="mono">{conta ? encurtar(conta) : "—"}</span> · DETRAN</span>
@@ -162,12 +171,12 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
                 }
             >
                 <p className="concluido-destaque">{concluido.marca?.nome} {concluido.modelo} · {concluido.anoFabricacao}/{concluido.anoModelo}</p>
-                <p><span className="mono">{concluido.chassi}</span> · {km(concluido.kmInicial)} na primeira leitura</p>
-                {concluido.privadoFalhou !== null && (
-                    <PrivadoPendente
-                        dados={concluido.dadosPrivados}
-                        falhaInicial={concluido.privadoFalhou}
-                        oQue="A identificação completa, a placa, a UF e o proprietário na data do cadastro"
+                <p><span className="mono">{concluido.chassi}</span> · {km(concluido.kmInicial)} no primeiro registro</p>
+                {concluido.complementoFalhou !== null && (
+                    <ComplementoPendente
+                        enviar={() => registrarComplemento(concluido.dadosComplementares)}
+                        falhaInicial={concluido.complementoFalhou}
+                        oQue="A identificação, a placa, a UF e o proprietário na data do cadastro"
                     />
                 )}
             </Concluido>
@@ -190,11 +199,12 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
                     <div><dt>UF de registro na data do cadastro</dt><dd>{nomeUf(dados.uf)}</dd></div>
                 </dl>
 
-                <h3 className="evento-detalhes-subtitulo">Primeira leitura</h3>
+                <h3 className="evento-detalhes-subtitulo">Primeiro registro</h3>
                 <dl className="lista-dados">
                     <div><dt>Quilometragem observada</dt><dd className="destaque-numero">{km(dados.kmInicial)}</dd></div>
-                    <div><dt>Observada em</dt><dd>{dataHora(new Date(dados.observadaEm))}</dd></div>
-                    <div><dt>Entidade que realizou a leitura</dt><dd>{entidade}</dd></div>
+                    <div><dt>Data e hora do evento</dt><dd>{dataHora(new Date(dados.dataEvento))}</dd></div>
+                    <div><dt>Local do evento</dt><dd>{local}</dd></div>
+                    <div><dt>Registrado por</dt><dd>{responsavel}</dd></div>
                     <div><dt>Comprovante</dt><dd>{arquivo ? arquivo.name : "Nenhum anexado"}</dd></div>
                 </dl>
 
@@ -204,10 +214,11 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
                     <div><dt>CPF</dt><dd>{formatarCpf(dados.cpfProprietario)}</dd></div>
                 </dl>
 
-                <Aviso tipo="info" titulo="O que fica público">
-                    Vão para a blockchain, de forma permanente: o chassi, “{emCadeia?.modelo}”, o ano-modelo
-                    {" "}{emCadeia?.ano}, a quilometragem, a carteira que assina e, se houver, o hash do comprovante.
-                    Placa, UF, proprietário e a data da observação ficam só nos registros privados.
+                <Aviso tipo="info" titulo="O que vai para a blockchain">
+                    De forma permanente e pública: a chave derivada do chassi, a quilometragem, a data e hora do
+                    evento, o município, o identificador do DETRAN como organização, a carteira que assina e, se
+                    houver, o hash do comprovante. Placa, UF, marca, modelo, anos e proprietário ficam só no
+                    cadastro do KMChain, fora da blockchain.
                 </Aviso>
                 {falha && <Aviso tipo="erro">{falha}</Aviso>}
 
@@ -228,7 +239,7 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
             <fieldset className="grupo">
                 <legend className="grupo-titulo"><span className="grupo-numero">1</span>Identificação do veículo</legend>
                 <div className="grade-2">
-                    <Campo rotulo="Chassi" erro={erros.chassi} ajuda={erros.chassi ? undefined : "17 caracteres. É o identificador do veículo no KmChain."}>
+                    <Campo rotulo="Chassi" erro={erros.chassi} ajuda={erros.chassi ? undefined : "17 caracteres. É o identificador do veículo no KMChain."}>
                         <input className="mono" value={dados.chassi} maxLength={17} autoComplete="off"
                             autoCapitalize="characters" spellCheck={false}
                             onChange={(e) => alterar("chassi", normalizarChassi(e.target.value))} />
@@ -270,33 +281,35 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
                 </Campo>
                 <p className="nota-privacidade">
                     <Icone nome="info" tamanho={14} />
-                    Placa e UF ficam só nos registros privados, com data: uma mudança futura é registrada como nova informação, sem apagar esta.
+                    A identificação fica no cadastro do KMChain, fora da blockchain. Placa e UF são datadas: uma mudança futura entra como nova informação, sem apagar esta.
                 </p>
             </fieldset>
 
             <fieldset className="grupo">
-                <legend className="grupo-titulo"><span className="grupo-numero">2</span>Primeira leitura</legend>
+                <legend className="grupo-titulo"><span className="grupo-numero">2</span>Primeiro registro</legend>
                 <div className="grade-2">
                     <Campo rotulo="Quilometragem observada" sufixo="km" erro={erros.kmInicial}>
                         <input className="entrada-km" inputMode="numeric" autoComplete="off" value={dados.kmInicial}
                             onChange={(e) => alterar("kmInicial", e.target.value.replace(/\D/g, ""))} />
                     </Campo>
-                    <Campo rotulo="Data e hora da observação" erro={erros.observadaEm}
-                        ajuda={erros.observadaEm ? undefined : "Quando o hodômetro foi lido. Até 30 dias atrás."}>
-                        <input type="datetime-local" value={dados.observadaEm} max={agoraLocal()}
-                            onChange={(e) => alterar("observadaEm", e.target.value)} />
+                    <Campo rotulo="Data e hora do evento" erro={erros.dataEvento}
+                        ajuda={erros.dataEvento ? undefined : "Quando o hodômetro foi lido. Até 30 dias atrás."}>
+                        <input type="datetime-local" value={dados.dataEvento} max={agoraLocal()}
+                            onChange={(e) => alterar("dataEvento", e.target.value)} />
                     </Campo>
                 </div>
+                <SeletorMunicipio valor={dados.municipio} erro={erros.municipio} rotuloCidade="Cidade do evento"
+                    ajuda="Onde a quilometragem foi lida." aoEscolher={(codigo) => alterar("municipio", codigo)} />
                 <div className="campo">
-                    <span className="campo-rotulo">Entidade que realizou a leitura</span>
-                    <p className="entidade-leitura">{entidade}</p>
-                    <p className="campo-ajuda">A leitura é atribuída à carteira que assina o cadastro.</p>
+                    <span className="campo-rotulo">Registrado por</span>
+                    <p className="entidade-leitura">{responsavel}</p>
+                    <p className="campo-ajuda">O registro é atribuído à carteira que assina o cadastro e ao DETRAN.</p>
                 </div>
                 <CampoArquivo arquivo={arquivo} aoEscolher={setArquivo} ajuda="Documento do veículo ou laudo da leitura. PDF, PNG ou JPEG até 3 MB." />
             </fieldset>
 
             <fieldset className="grupo">
-                <legend className="grupo-titulo"><span className="grupo-numero">3</span>Informações privadas</legend>
+                <legend className="grupo-titulo"><span className="grupo-numero">3</span>Proprietário (acesso restrito)</legend>
                 <p className="campo-rotulo">Proprietário na data do cadastro</p>
                 <div className="grade-2">
                     <Campo rotulo="Nome" erro={erros.nomeProprietario}>
@@ -309,7 +322,7 @@ export default function CadastroVeiculo({ usuario, conta, aoVerHistorico }) {
                 </div>
                 <p className="nota-privacidade">
                     <Icone nome="info" tamanho={14} />
-                    Nome e CPF ficam só nos registros privados do DETRAN, não aparecem na consulta pública e não vão para a blockchain.
+                    Nome e CPF ficam só no cadastro do KMChain, com acesso restrito ao DETRAN. Não aparecem na consulta pública e não vão para a blockchain.
                 </p>
             </fieldset>
 

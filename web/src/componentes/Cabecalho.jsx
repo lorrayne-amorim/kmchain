@@ -71,7 +71,8 @@ export function Rodape() {
     return (
         <footer className="rodape">
             <div className="conteiner rodape-conteudo">
-                <p>KMChain · Histórico de quilometragem veicular</p>
+                <p>KMChain · Histórico de quilometragem veicular · Protótipo acadêmico, sem vínculo com órgãos públicos</p>
+                <a href="#/organizacoes">Organizações credenciadas</a>
                 <a href="#/institucional">Acesso institucional</a>
             </div>
         </footer>

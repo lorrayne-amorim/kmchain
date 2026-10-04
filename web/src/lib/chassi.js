@@ -4,7 +4,7 @@
 // Esta e a UNICA regra de normalizacao, validacao e derivacao da chave, usada
 // pela tela, pelas rotas /api, pelo QR Code e pelos testes. A chave e
 //     keccak256(bytes UTF-8 do chassi normalizado)
-// - a mesma que o contrato em uso (v1) calcula em chaveDoChassi(). A chave e
+// - e ela que o contrato recebe; o chassi em texto nunca e enviado. A chave e
 // um PSEUDONIMO, nao anonimizacao: quem conhece o chassi calcula a chave e
 // localiza o historico publico.
 import { keccak256, toUtf8Bytes } from "ethers";

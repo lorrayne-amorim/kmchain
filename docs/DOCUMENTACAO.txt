@@ -1,3 +1,6 @@
+DOCUMENTO HISTORICO: descreve o sistema em 27/09/2026, com o contrato v1.
+O estado atual esta em docs/INVENTARIO_FUNCIONAL.md.
+
 ===============================================================================
                          KMCHAIN - DOCUMENTACAO DO SISTEMA
                           (estado em 27/09/2026)

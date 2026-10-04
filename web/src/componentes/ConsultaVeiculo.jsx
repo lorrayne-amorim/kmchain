@@ -1,7 +1,10 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { contratoLeitura, papeisDasContas } from "../lib/blockchain";
+import { contratoImplantado } from "../lib/blockchain";
 import { normalizarChassi, validarChassi } from "../lib/formato";
+import { carregarHistorico } from "../lib/historico";
 import { carregarIdentificacao } from "../lib/identificacao";
+import { listarOrganizacoes } from "../lib/organizacoes";
+import { useMunicipios } from "../lib/useMunicipios";
 import Aviso from "../ui/Aviso";
 import Botao from "../ui/Botao";
 import Campo from "../ui/Campo";
@@ -25,8 +28,9 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
     const [falha, setFalha] = useState(null); // { tipo: "nao-encontrado" | "rede", chassi }
     const [carregando, setCarregando] = useState(Boolean(inicial));
     const [resultado, setResultado] = useState(null);
-    const [entidades, setEntidades] = useState({});
+    const [organizacoes, setOrganizacoes] = useState(null);
     const [identificacao, setIdentificacao] = useState(null);
+    const municipios = useMunicipios();
     const [lendoQr, setLendoQr] = useState(false);
     const busca = useRef(0);
     const entrada = useRef(null);
@@ -37,7 +41,6 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
         setFalha(null);
         setErroCampo("");
         setResultado(null);
-        setEntidades({});
         setIdentificacao(null);
 
         const problema = validarChassi(alvo);
@@ -49,37 +52,24 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
 
         setCarregando(true);
         try {
-            const contrato = contratoLeitura();
-            const veiculo = await contrato.getVeiculo(alvo);
+            // Os eventos sao lidos direto da blockchain, sem passar pelo servidor.
+            const historico = await carregarHistorico(alvo);
             if (numeroBusca !== busca.current) return;
-            if (!veiculo.cadastrado) {
+            if (!historico) {
                 setFalha({ tipo: "nao-encontrado", chassi: alvo });
                 return;
             }
-            const [historico, conformidade] = await Promise.all([
-                contrato.getHistorico(alvo),
-                contrato.conformidade(alvo)
-            ]);
-            if (numeroBusca !== busca.current) return;
-            setResultado({
-                chassi: alvo,
-                veiculo,
-                historico: [...historico],
-                conforme: conformidade[0],
-                possuiAtipicas: conformidade[5]
-            });
+            setResultado(historico);
             window.scrollTo(0, 0);
 
-            // Funcao de cada entidade (DETRAN, vistoria, oficina): chega depois,
-            // sem atrasar a exibicao do historico.
-            // Placa, UF, marca e anos vem do banco (nao da blockchain) e chegam
-            // depois; sem eles, o historico em cadeia aparece do mesmo jeito.
+            // Do banco do KMChain (nao da blockchain) vem a identificacao do
+            // veiculo, a transacao de cada evento e o nome das organizacoes.
+            // Chegam depois; sem eles, o historico aparece do mesmo jeito.
             carregarIdentificacao(alvo)
                 .then((id) => numeroBusca === busca.current && setIdentificacao(id))
                 .catch(() => { });
-
-            papeisDasContas(historico.map((l) => l.entidade))
-                .then((papeis) => numeroBusca === busca.current && setEntidades(papeis))
+            listarOrganizacoes()
+                .then((lista) => setOrganizacoes(Object.fromEntries(lista.map((o) => [o.id_cadeia, o]))))
                 .catch(() => { });
         } catch {
             if (numeroBusca === busca.current) setFalha({ tipo: "rede", chassi: alvo });
@@ -140,6 +130,9 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
         consultar(chassiLido);
     }
 
+    if (!contratoImplantado) {
+        return <Aviso tipo="alerta" titulo="Consulta indisponível">O contrato do KMChain ainda não foi implantado nesta rede.</Aviso>;
+    }
     if (carregando) return <EsqueletoHistorico />;
 
     if (resultado) {
@@ -148,7 +141,14 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
                 <Botao variante="fantasma" tamanho="p" icone="voltar" className="voltar" onClick={novaConsulta}>
                     Nova consulta
                 </Botao>
-                <Historico {...resultado} identificacao={identificacao} entidades={entidades} institucional={institucional} />
+                <Historico
+                    historico={resultado}
+                    identificacao={identificacao?.veiculo}
+                    complementos={Object.fromEntries((identificacao?.transacoes ?? []).map((t) => [t.indice, t]))}
+                    organizacoes={organizacoes}
+                    municipios={municipios}
+                    institucional={institucional}
+                />
             </div>
         );
     }
@@ -248,7 +248,7 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
         <section className="busca" aria-labelledby="titulo-busca">
             <h1 id="titulo-busca" className="busca-titulo">Consulte o histórico de um veículo</h1>
             <p className="busca-descricao">
-                Veja a quilometragem registrada ao longo do tempo pelas entidades credenciadas no KmChain.
+                Veja a quilometragem registrada ao longo do tempo, com data, local e a organização responsável por cada registro.
             </p>
 
             {formulario}
@@ -263,6 +263,9 @@ export default function ConsultaVeiculo({ institucional = false, chassiInicial =
 
             {falhaNaBusca}
             {dialogoQr}
+            <p className="busca-nota">
+                <a href="#/organizacoes">Ver as organizações credenciadas no mapa</a>
+            </p>
         </section>
     );
 }

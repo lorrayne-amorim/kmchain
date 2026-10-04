@@ -3252,3 +3252,165 @@ input.mono::placeholder {
 .dossie-cabecalho .dossie-nota {
   margin-top: var(--e2);
 }
+
+/* ------------------------------------------------ eventos: tipo, local e verificacao */
+.evento-tipo-destaque {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--petroleo);
+}
+
+.evento-verificado {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--e1);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--verde-escuro);
+}
+
+/* historico de locais dos registros */
+.locais {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.locais li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e2) 0 var(--e2) var(--e4);
+  border-left: 2px solid var(--verde-borda);
+}
+
+.locais-cidade {
+  font-weight: 600;
+}
+
+.locais-meta {
+  font-size: 13.5px;
+  color: var(--texto-2);
+}
+
+/* ------------------------------------------------ situacoes (organizacao, funcionario, solicitacao) */
+.situacao-ativa,
+.situacao-aprovada {
+  border-color: var(--verde-borda);
+  background: var(--verde-suave);
+  color: var(--verde-escuro);
+}
+
+.situacao-pendente {
+  border-color: var(--alerta-borda);
+  background: var(--alerta-suave);
+  color: var(--alerta);
+}
+
+.situacao-suspensa,
+.situacao-rejeitada {
+  border-color: var(--perigo-borda);
+  background: var(--perigo-suave);
+  color: var(--perigo);
+}
+
+.painel > .painel-tabela-titulo:first-child {
+  margin-top: 0;
+}
+
+.voltar {
+  align-self: flex-start;
+}
+
+/* ------------------------------------------------ mapa das organizacoes */
+.mapa {
+  width: 100%;
+  height: 460px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-g);
+  background: var(--superficie-2);
+  z-index: 0;
+}
+
+.mapa-pequeno,
+.mapa-pequeno .mapa {
+  height: 260px;
+}
+
+.mapa-filtros {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--e4);
+}
+
+.mapa-filtros > * + * {
+  margin-top: 0;
+}
+
+.mapa-grade {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--e4);
+  align-items: start;
+}
+
+.mapa-lista {
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.mapa-detalhe {
+  padding-bottom: var(--e3);
+  border-bottom: 1px solid var(--borda);
+}
+
+.mapa-itens {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mapa-itens button {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e3);
+  width: 100%;
+  padding: var(--e3) var(--e2);
+  border: 0;
+  border-bottom: 1px solid var(--borda);
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mapa-itens button[aria-pressed="true"] {
+  background: var(--verde-suave);
+}
+
+.mapa-itens button > span:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.mapa-ponto {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+
+@media (max-width: 900px) {
+  .mapa-grade,
+  .mapa-filtros {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mapa {
+    height: 340px;
+  }
+}

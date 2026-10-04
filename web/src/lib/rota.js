@@ -1,11 +1,13 @@
 // Navegacao minima por hash: a consulta publica vive em "/" (com ?chassi=
-// para o QR Code) e a area institucional em "#/institucional/<secao>".
+// para o QR Code), o mapa publico das organizacoes em "#/organizacoes" e a
+// area institucional em "#/institucional/<secao>".
 // Assim o botao voltar do celular funciona sem precisar de um roteador.
 import { useEffect, useState } from "react";
 
 function ler() {
     const partes = window.location.hash.replace(/^#\/?/, "").split("/");
     if (partes[0] === "institucional") return { area: "institucional", secao: partes[1] || "inicio" };
+    if (partes[0] === "organizacoes") return { area: "organizacoes", secao: null };
     return { area: "publico", secao: null };
 }
 

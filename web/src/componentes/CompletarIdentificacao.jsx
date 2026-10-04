@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { mensagemDeErro } from "../lib/erros";
 import { focarPrimeiroErro } from "../lib/foco";
 import { LISTA_INICIAL, carregarMarcas } from "../lib/marcas";
-import { alterarDado } from "../lib/privado";
+import { alterarDado } from "../lib/registros";
 import { avisar } from "../lib/toast";
 import { UFS } from "../lib/veiculo";
 import Aviso from "../ui/Aviso";
@@ -12,10 +12,11 @@ import SeletorMarca from "../ui/SeletorMarca";
 
 const VAZIO = { placa: "", marca: null, modelo: "", anoFabricacao: "", anoModelo: "", uf: "", nomeProprietario: "", cpfProprietario: "" };
 
-// Veiculo que esta na blockchain sem identificacao privada (cadastrado antes
-// dela existir, ou cujo registro privado se perdeu). O servidor confere que
-// marca + modelo e ano-modelo batem com o que o contrato guardou; placa, UF
-// e proprietario passam a valer na data do cadastro em cadeia.
+// Veiculo que tem eventos na blockchain mas esta sem identificacao no banco
+// do KMChain (os dados complementares do cadastro nao foram salvos). Marca,
+// modelo e anos nao ficam no contrato: sao informados aqui, conforme o
+// documento do veiculo.
+// Placa, UF e proprietario passam a valer na data do cadastro em cadeia.
 export default function CompletarIdentificacao({ chassi, aoConcluir }) {
     const [dados, setDados] = useState(VAZIO);
     const [marcas, setMarcas] = useState(LISTA_INICIAL);
@@ -59,8 +60,9 @@ export default function CompletarIdentificacao({ chassi, aoConcluir }) {
         <form className="painel formulario" onSubmit={salvar} noValidate>
             <h2 className="painel-titulo">Completar identificação</h2>
             <p className="painel-texto">
-                Este veículo está na blockchain, mas sem placa, UF e anos no cadastro do KMChain. Marca, modelo
-                e ano-modelo precisam corresponder ao que foi gravado em cadeia. Placa e UF passam a valer na data do cadastro.
+                Este veículo tem eventos registrados na blockchain, mas está sem identificação no cadastro do
+                KMChain. Marca, modelo, anos, placa e UF não ficam na blockchain: informe-os conforme o documento
+                do veículo. Placa e UF passam a valer na data do cadastro.
             </p>
 
             <div className="grade-2">

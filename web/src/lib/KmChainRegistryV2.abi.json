@@ -1,0 +1,1016 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "anterior",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "AdministradorNaoPodeSerDesativado",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "carteira",
+        "type": "address"
+      }
+    ],
+    "name": "ApenasAdministrador",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "carteira",
+        "type": "address"
+      }
+    ],
+    "name": "ApenasDetran",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "carteira",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      }
+    ],
+    "name": "CarteiraDeOutraOrganizacao",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CarteiraInvalida",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ChaveInvalida",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DataDoEventoInvalida",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DetranNaoPodeSerSuspenso",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "IndiceInvalido",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "avanco",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "limite",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "dias",
+        "type": "uint256"
+      }
+    ],
+    "name": "LeituraAtipica",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LeituraJaCorrigida",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MunicipioInvalido",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      }
+    ],
+    "name": "OrganizacaoInativa",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      }
+    ],
+    "name": "OrganizacaoInexistente",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "enviada",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "ultima",
+        "type": "uint256"
+      }
+    ],
+    "name": "QuilometragemRegressiva",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "carteira",
+        "type": "address"
+      }
+    ],
+    "name": "SemVinculoAtivo",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TipoDeOrganizacaoInvalido",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "tipoOrganizacao",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "tipoEvento",
+        "type": "uint8"
+      }
+    ],
+    "name": "TipoNaoPermitido",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "VeiculoJaCadastrado",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "VeiculoNaoCadastrado",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "administrador",
+        "type": "address"
+      }
+    ],
+    "name": "AdministradorDefinido",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "indice",
+        "type": "uint256"
+      }
+    ],
+    "name": "EventoRegistrado",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "carteira",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "ativo",
+        "type": "bool"
+      }
+    ],
+    "name": "FuncionarioDefinido",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "indiceOriginal",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "indiceCorrecao",
+        "type": "uint256"
+      }
+    ],
+    "name": "LeituraCorrigida",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "tipo",
+        "type": "uint8"
+      }
+    ],
+    "name": "OrganizacaoCredenciada",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "ativa",
+        "type": "bool"
+      }
+    ],
+    "name": "SituacaoDaOrganizacaoAlterada",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint8",
+        "name": "tipoOrganizacao",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tipos",
+        "type": "uint256"
+      }
+    ],
+    "name": "TiposPermitidosAlterados",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      }
+    ],
+    "name": "VeiculoCadastrado",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "ATRASO_MAXIMO",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ORGANIZACAO_DETRAN",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SEM_REFERENCIA",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TIPO_CADASTRO_INICIAL",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TIPO_CORRECAO",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "km",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "dataEvento",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint32",
+        "name": "municipio",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "hashDocumento",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cadastrarVeiculo",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "contratoAnterior",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "indice",
+        "type": "uint256"
+      }
+    ],
+    "name": "correcaoDe",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "indice",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "kmCorreta",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "dataEvento",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint32",
+        "name": "municipio",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "hashDocumento",
+        "type": "bytes32"
+      }
+    ],
+    "name": "corrigirLeitura",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum KmChainRegistryV2.TipoOrganizacao",
+        "name": "tipo",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "administrador",
+        "type": "address"
+      }
+    ],
+    "name": "credenciarOrganizacao",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      },
+      {
+        "internalType": "address",
+        "name": "novo",
+        "type": "address"
+      }
+    ],
+    "name": "definirAdministrador",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "carteira",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "ativo",
+        "type": "bool"
+      }
+    ],
+    "name": "definirFuncionario",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "limiteDiario",
+        "type": "uint32"
+      }
+    ],
+    "name": "definirLimiteDoVeiculo",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "limiteDiario",
+        "type": "uint32"
+      }
+    ],
+    "name": "definirLimitePadrao",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "ativa",
+        "type": "bool"
+      }
+    ],
+    "name": "definirSituacaoDaOrganizacao",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum KmChainRegistryV2.TipoOrganizacao",
+        "name": "tipo",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tipos",
+        "type": "uint256"
+      }
+    ],
+    "name": "definirTiposPermitidos",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "indice",
+        "type": "uint256"
+      }
+    ],
+    "name": "getEvento",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint64",
+            "name": "km",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "dataEvento",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "dataBloco",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "municipio",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "tipo",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "atipica",
+            "type": "bool"
+          },
+          {
+            "internalType": "address",
+            "name": "responsavel",
+            "type": "address"
+          },
+          {
+            "internalType": "uint32",
+            "name": "organizacao",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "referencia",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "hashDocumento",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct KmChainRegistryV2.Evento",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getHistorico",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint64",
+            "name": "km",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "dataEvento",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "dataBloco",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "municipio",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "tipo",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "atipica",
+            "type": "bool"
+          },
+          {
+            "internalType": "address",
+            "name": "responsavel",
+            "type": "address"
+          },
+          {
+            "internalType": "uint32",
+            "name": "organizacao",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "referencia",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "hashDocumento",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct KmChainRegistryV2.Evento[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      }
+    ],
+    "name": "getOrganizacao",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint8",
+            "name": "tipo",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "ativa",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint64",
+            "name": "credenciadaEm",
+            "type": "uint64"
+          },
+          {
+            "internalType": "address",
+            "name": "administrador",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct KmChainRegistryV2.Organizacao",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getVeiculo",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "cadastrado",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint32",
+            "name": "limiteDiario",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "totalEventos",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "totalCorrecoes",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "ultimaKm",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "ultimaDataEvento",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct KmChainRegistryV2.Veiculo",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "limiteDiarioPadrao",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "chave",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "km",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint8",
+        "name": "tipo",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint64",
+        "name": "dataEvento",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint32",
+        "name": "municipio",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "hashDocumento",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "confirmarAtipica",
+        "type": "bool"
+      }
+    ],
+    "name": "registrarEvento",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "name": "tiposPermitidos",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalOrganizacoes",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "carteira",
+        "type": "address"
+      }
+    ],
+    "name": "vinculoDe",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "organizacao",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "tipo",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "organizacaoAtiva",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "ativo",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "administrador",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

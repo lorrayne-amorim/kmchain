@@ -1,133 +1,79 @@
 import { useEffect, useRef, useState } from "react";
-import { conectarCarteira, contaConectada, papeisDaConta } from "../lib/blockchain";
-import { definirContaAtual } from "../lib/api";
-import { usuarioLogado, sair, vincularCarteira } from "../lib/auth";
-import { mensagemDeErro } from "../lib/erros";
-import { encurtar, rotulosPapel, saudacao } from "../lib/formato";
+import { useAcesso } from "../lib/acesso";
+import { contratoImplantado } from "../lib/blockchain";
+import { rotuloDaOrganizacao } from "../lib/eventos";
+import { encurtar, saudacao } from "../lib/formato";
 import { irPara, linkPara } from "../lib/rota";
 import Aviso from "../ui/Aviso";
 import Botao from "../ui/Botao";
 import Copiar from "../ui/Copiar";
 import Icone from "../ui/Icone";
 import Pagina from "../ui/Pagina";
+import Auditoria from "./Auditoria";
 import Autenticacao from "./Autenticacao";
 import Cabecalho from "./Cabecalho";
 import CadastroVeiculo from "./CadastroVeiculo";
-import ConsultaPrivada from "./ConsultaPrivada";
 import ConsultaVeiculo from "./ConsultaVeiculo";
-import CorrigirLeitura from "./CorrigirLeitura";
-import CredenciarEntidade from "./CredenciarEntidade";
+import DadosComplementares from "./DadosComplementares";
 import MarcasPropostas from "./MarcasPropostas";
-import RegistroLeitura from "./RegistroLeitura";
+import RegistroEvento from "./RegistroEvento";
+import RegistrosDaOrganizacao from "./RegistrosDaOrganizacao";
+import Correcoes from "./correcoes/Correcoes";
+import Equipe from "./organizacoes/Equipe";
+import Organizacoes from "./organizacoes/Organizacoes";
 
-const SEM_PAPEIS = { admin: false, detran: false, vistoria: false, oficina: false };
+const SECOES_AMPLAS = ["consulta", "correcoes", "registros", "equipe", "organizacoes", "complementares", "auditoria"];
 
-// Area do DETRAN/vistoria/oficina, atras de duas camadas: login/senha
-// (conta no banco) e, so depois, a carteira credenciada em cadeia pelo admin.
-// As secoes visiveis dependem das funcoes que a carteira tem no contrato.
-export default function Painel({ secao }) {
-    const [conta, setConta] = useState(null);
-    const [papeis, setPapeis] = useState(SEM_PAPEIS);
-    const [verificando, setVerificando] = useState(false);
-    const [conectando, setConectando] = useState(false);
-    const [erroCarteira, setErroCarteira] = useState("");
-
-    const [usuario, setUsuario] = useState(null);
-    const [carregandoSessao, setCarregandoSessao] = useState(true);
-    const [vinculando, setVinculando] = useState(false);
-    const [avisoVinculo, setAvisoVinculo] = useState(null); // { tipo, texto }
-    const [chassiConsulta, setChassiConsulta] = useState("");
-
-    async function atualizar(endereco) {
-        setConta(endereco);
-        if (!endereco) return setPapeis(SEM_PAPEIS);
-        setVerificando(true);
-        try {
-            setPapeis(await papeisDaConta(endereco));
-        } finally {
-            setVerificando(false);
-        }
-    }
-
-    // Reconecta sozinho se a carteira ja estava autorizada neste site,
-    // e acompanha troca de conta feita direto na extensao.
-    useEffect(() => {
-        contaConectada().then(atualizar).catch(() => { });
-        if (!window.ethereum) return;
-        const aoTrocarConta = (contas) => atualizar(contas[0] ?? null).catch(() => { });
-        window.ethereum.on("accountsChanged", aoTrocarConta);
-        return () => window.ethereum.removeListener("accountsChanged", aoTrocarConta);
-    }, []);
-
-    // Sessao de login (primeira camada): quem esta logado ao abrir o site.
-    useEffect(() => {
-        usuarioLogado()
-            .then(setUsuario)
-            .catch(() => setUsuario(null))
-            .finally(() => setCarregandoSessao(false));
-    }, []);
-
-    // As assinaturas pedidas ao servidor levam o e-mail desta conta.
-    useEffect(() => definirContaAtual(usuario), [usuario]);
-
-    const credenciada = papeis.detran || papeis.vistoria || papeis.oficina;
-    const liberado = Boolean(usuario && conta && !verificando && (credenciada || papeis.admin));
-    const vinculada = Boolean(usuario?.carteira && conta && usuario.carteira.toLowerCase() === conta.toLowerCase());
-    // O servidor so aceita registros privados, comprovantes e consultas
-    // sensiveis da carteira vinculada a conta; sem ela, essas secoes somem.
-
-    const secoes = [
+// Secoes do painel conforme o vinculo: o tipo da organizacao define os
+// eventos e as acoes; o DETRAN tem as funcoes administrativas. E so o que a
+// tela oferece - o servidor e o contrato conferem cada operacao.
+function secoesDoPainel({ operante, ehDetran, ehAdministrador, vinculo }) {
+    return [
         { id: "inicio", rotulo: "Início", pode: true },
         { id: "consulta", rotulo: "Consultar", pode: true,
-            titulo: "Consultar veículo", descricao: "Veja o histórico completo de quilometragem de um chassi." },
-        { id: "registro", rotulo: "Novo registro", pode: credenciada && vinculada,
-            titulo: "Novo registro", descricao: "Registre a quilometragem de uma vistoria, revisão, transferência ou sinistro." },
-        { id: "cadastro", rotulo: "Cadastrar veículo", pode: papeis.detran && vinculada,
-            titulo: "Cadastrar veículo", descricao: "Inclua um veículo com a quilometragem inicial e os dados do proprietário." },
-        { id: "correcao", rotulo: "Correções", pode: papeis.detran && vinculada,
-            titulo: "Corrigir leitura", descricao: "Corrija uma leitura equivocada. A leitura original continua no histórico." },
-        { id: "privado", rotulo: "Registros privados", pode: papeis.detran && vinculada,
-            titulo: "Registros privados", descricao: "Consulte placa, proprietário e o responsável por cada serviço." },
-        { id: "credenciar", rotulo: "Acessos", pode: papeis.admin,
-            titulo: "Acessos", descricao: "Conceda ou revogue funções de oficinas, centros de vistoria e DETRAN." }
+            titulo: "Consultar veículo", descricao: "Veja o histórico de quilometragem de um chassi." },
+        { id: "registro", rotulo: "Novo registro", pode: operante,
+            titulo: "Novo registro", descricao: ehDetran
+                ? "Registre um evento institucional do DETRAN com a quilometragem do veículo."
+                : `Registre um evento de ${rotuloDaOrganizacao(vinculo.tipo).toLowerCase()} com a quilometragem do veículo.` },
+        { id: "cadastro", rotulo: "Cadastrar veículo", pode: operante && ehDetran,
+            titulo: "Cadastrar veículo", descricao: "Inclua um veículo com o primeiro registro e os dados do proprietário." },
+        { id: "correcoes", rotulo: "Correções", pode: operante,
+            titulo: "Correções", descricao: ehDetran
+                ? "Analise as solicitações das organizações. O registro original nunca é alterado."
+                : "Solicite ao DETRAN a correção de um registro e acompanhe a decisão." },
+        { id: "registros", rotulo: "Registros", pode: operante,
+            titulo: ehDetran ? "Registros de todas as organizações" : "Registros da organização",
+            descricao: "Eventos registrados, com data, local e responsável." },
+        { id: "equipe", rotulo: "Equipe", pode: operante && ehAdministrador,
+            titulo: "Equipe", descricao: "Vincule, ative e desative os funcionários da sua organização." },
+        { id: "organizacoes", rotulo: "Organizações", pode: operante && ehDetran,
+            titulo: "Organizações", descricao: "Cadastre, credencie e suspenda oficinas, empresas de vistoria e seguradoras." },
+        { id: "complementares", rotulo: "Dados complementares", pode: operante && ehDetran,
+            titulo: "Dados complementares", descricao: "Dados do veículo mantidos fora da blockchain: identificação, placa, UF, proprietário e quem realizou cada registro." },
+        { id: "auditoria", rotulo: "Auditoria", pode: operante && ehDetran,
+            titulo: "Auditoria", descricao: "Ações administrativas registradas no KMChain." }
     ].filter((s) => s.pode);
+}
 
-    // Se a carteira perder a funcao que dava acesso a secao aberta (ex.:
-    // trocou de conta na extensao), volta ao inicio em vez de travar a tela.
+// Area institucional, atras de duas camadas: login e senha (conta no banco)
+// e a carteira dessa conta com vinculo ativo numa organizacao (no contrato).
+export default function Painel({ secao }) {
+    const acesso = useAcesso();
+    const { usuario, organizacao, conta, vinculo, vinculada, liberado, operante, ehAdministrador } = acesso;
+    const [chassiConsulta, setChassiConsulta] = useState("");
+
+    const secoes = secoesDoPainel(acesso);
+
+    // Se o vinculo deixar de dar acesso a secao aberta (ex.: trocou de conta
+    // na extensao), volta ao inicio em vez de travar a tela.
     useEffect(() => {
         if (liberado && !secoes.some((s) => s.id === secao)) irPara("inicio", { substituir: true });
     });
 
-    async function conectar() {
-        setErroCarteira("");
-        setConectando(true);
-        try {
-            await atualizar(await conectarCarteira());
-        } catch (e) {
-            setErroCarteira(mensagemDeErro(e, "Não foi possível conectar a carteira. Tente novamente."));
-        } finally {
-            setConectando(false);
-        }
-    }
-
     async function sairDaConta() {
-        await sair();
-        setUsuario(null);
+        await acesso.encerrar();
         irPara("inicio", { substituir: true });
-    }
-
-    async function vincular() {
-        setAvisoVinculo(null);
-        setVinculando(true);
-        try {
-            await vincularCarteira(conta, usuario.email);
-            setUsuario((u) => ({ ...u, carteira: conta.toLowerCase() }));
-            setAvisoVinculo({ tipo: "sucesso", texto: "Carteira vinculada à sua conta." });
-        } catch (e) {
-            setAvisoVinculo({ tipo: "erro", texto: mensagemDeErro(e, "Não foi possível vincular a carteira.") });
-        } finally {
-            setVinculando(false);
-        }
     }
 
     function verHistorico(chassi) {
@@ -135,68 +81,58 @@ export default function Painel({ secao }) {
         irPara("consulta");
     }
 
-    const infoConta = usuario && (
-        <InfoConta usuario={usuario} conta={conta} papeis={papeis} aoSair={sairDaConta} />
-    );
+    const papel = vinculo.ativo ? `${organizacao?.nome_fantasia ?? rotuloDaOrganizacao(vinculo.tipo)} · ${ehAdministrador ? "Administrador" : "Funcionário"}` : "";
+    const infoConta = usuario && <InfoConta usuario={usuario} conta={conta} papel={papel} aoSair={sairDaConta} />;
 
     let conteudo;
-    if (carregandoSessao) {
+    if (acesso.carregandoSessao) {
         conteudo = <div className="pagina pagina-estreita"><div className="esqueleto-linha esqueleto-titulo" style={{ width: "60%" }} /></div>;
     } else if (!usuario) {
-        conteudo = <Autenticacao aoAutenticar={setUsuario} />;
+        conteudo = <Autenticacao aoAutenticar={acesso.aoAutenticar} />;
     } else if (!liberado) {
-        conteudo = (
-            <EtapasAcesso
-                usuario={usuario}
-                conta={conta}
-                verificando={verificando}
-                conectando={conectando}
-                erroCarteira={erroCarteira}
-                aoConectar={conectar}
-                vinculada={vinculada}
-                vinculando={vinculando}
-                aoVincular={vincular}
-                avisoVinculo={avisoVinculo}
-            />
-        );
+        conteudo = <EtapasAcesso acesso={acesso} />;
     } else {
         const atual = secoes.find((s) => s.id === secao);
         conteudo = (
             <>
-                {!vinculada && (
+                {!vinculo.organizacaoAtiva && (
                     <div className="conteiner faixa-aviso">
-                        <Aviso
-                            tipo={avisoVinculo?.tipo === "erro" ? "erro" : "info"}
-                            acao={<Botao variante="secundario" tamanho="p" carregando={vinculando} onClick={vincular}>{usuario.carteira ? "Vincular esta carteira" : "Vincular agora"}</Botao>}
-                        >
-                            {avisoVinculo?.tipo === "erro"
-                                ? avisoVinculo.texto
-                                : usuario.carteira
-                                    ? <>A carteira conectada não é a vinculada à sua conta (<span className="mono">{encurtar(usuario.carteira)}</span>). Troque de conta na MetaMask para registrar, ou vincule esta carteira no lugar da anterior.</>
-                                    : "Esta carteira ainda não está vinculada à sua conta. Vincule para registrar leituras, enviar comprovantes e ver dados privados: o vínculo identifica quem realizou cada registro."}
+                        <Aviso tipo="alerta" titulo="Credenciamento suspenso">
+                            O DETRAN suspendeu o credenciamento da sua organização. Novos registros estão bloqueados; os
+                            eventos já registrados continuam no histórico.
                         </Aviso>
                     </div>
                 )}
-                {avisoVinculo?.tipo === "sucesso" && vinculada && (
-                    <div className="conteiner faixa-aviso"><Aviso tipo="sucesso">{avisoVinculo.texto}</Aviso></div>
+                {!vinculada && (
+                    <div className="conteiner faixa-aviso">
+                        <Aviso
+                            tipo={acesso.avisoVinculo?.tipo === "erro" ? "erro" : "info"}
+                            acao={<Botao variante="secundario" tamanho="p" carregando={acesso.vinculando} onClick={acesso.vincular}>{usuario.carteira ? "Vincular esta carteira" : "Vincular agora"}</Botao>}
+                        >
+                            {acesso.avisoVinculo?.tipo === "erro"
+                                ? acesso.avisoVinculo.texto
+                                : usuario.carteira
+                                    ? <>A carteira conectada não é a vinculada à sua conta (<span className="mono">{encurtar(usuario.carteira)}</span>). Troque de conta na MetaMask para registrar, ou vincule esta carteira no lugar da anterior.</>
+                                    : "Esta carteira ainda não está vinculada à sua conta. Vincule para registrar eventos e enviar comprovantes: o vínculo identifica quem realizou cada registro."}
+                        </Aviso>
+                    </div>
                 )}
 
                 {secao === "inicio" && (
-                    <Inicio usuario={usuario} conta={conta} papeis={papeis} vinculada={vinculada}
-                        secoes={secoes.filter((s) => s.id !== "inicio")} podeRegistrar={credenciada && vinculada} />
+                    <Inicio usuario={usuario} conta={conta} organizacao={organizacao} vinculo={vinculo} papel={papel} vinculada={vinculada}
+                        secoes={secoes.filter((s) => s.id !== "inicio")} podeRegistrar={operante} />
                 )}
                 {atual && secao !== "inicio" && (
-                    <Pagina
-                        titulo={atual.titulo}
-                        descricao={atual.descricao}
-                        largura={secao === "consulta" || secao === "privado" || secao === "credenciar" ? "ampla" : "media"}
-                    >
+                    <Pagina titulo={atual.titulo} descricao={atual.descricao} largura={SECOES_AMPLAS.includes(secao) ? "ampla" : "media"}>
                         {secao === "consulta" && <ConsultaVeiculo key={chassiConsulta} institucional chassiInicial={chassiConsulta} />}
-                        {secao === "registro" && <RegistroLeitura usuario={usuario} aoVerHistorico={verHistorico} />}
-                        {secao === "cadastro" && <CadastroVeiculo usuario={usuario} conta={conta} aoVerHistorico={verHistorico} />}
-                        {secao === "correcao" && <CorrigirLeitura aoVerHistorico={verHistorico} />}
-                        {secao === "privado" && <ConsultaPrivada />}
-                        {secao === "credenciar" && <div className="empilhado"><CredenciarEntidade /><MarcasPropostas /></div>}
+                        {secao === "registro" && <RegistroEvento acesso={acesso} aoVerHistorico={verHistorico} />}
+                        {secao === "cadastro" && <CadastroVeiculo acesso={acesso} aoVerHistorico={verHistorico} />}
+                        {secao === "correcoes" && <Correcoes acesso={acesso} aoVerHistorico={verHistorico} />}
+                        {secao === "registros" && <RegistrosDaOrganizacao acesso={acesso} aoVerHistorico={verHistorico} />}
+                        {secao === "equipe" && <Equipe usuario={usuario} />}
+                        {secao === "organizacoes" && <Organizacoes usuario={usuario} />}
+                        {secao === "complementares" && <DadosComplementares />}
+                        {secao === "auditoria" && <div className="empilhado"><Auditoria />{ehAdministrador && <MarcasPropostas />}</div>}
                     </Pagina>
                 )}
             </>
@@ -219,8 +155,7 @@ export default function Painel({ secao }) {
     );
 }
 
-function InfoConta({ usuario, conta, papeis, aoSair }) {
-    const funcoes = rotulosPapel(papeis);
+function InfoConta({ usuario, conta, papel, aoSair }) {
     return (
         <div className="info-conta">
             <p className="info-conta-nome">{usuario.nome}</p>
@@ -229,7 +164,7 @@ function InfoConta({ usuario, conta, papeis, aoSair }) {
                 <p className="info-conta-carteira">
                     <Icone nome="carteira" tamanho={15} />
                     <span className="mono">{encurtar(conta)}</span>
-                    {funcoes.length > 0 && <span>· {funcoes.join(", ")}</span>}
+                    {papel && <span>· {papel}</span>}
                 </p>
             )}
             <div className="info-conta-acoes">
@@ -268,14 +203,13 @@ function MenuConta({ usuario, children }) {
     );
 }
 
-function Inicio({ usuario, conta, papeis, vinculada, secoes, podeRegistrar }) {
+function Inicio({ usuario, conta, organizacao, vinculo, papel, vinculada, secoes, podeRegistrar }) {
     const primeiroNome = usuario.nome.trim().split(/\s+/)[0];
-    const funcoes = rotulosPapel(papeis);
 
     return (
         <Pagina
             titulo={`${saudacao()}, ${primeiroNome}`}
-            descricao={funcoes.join(" · ")}
+            descricao={papel}
             acoes={podeRegistrar && (
                 <a className="botao botao-primario" href={linkPara("registro")}><Icone nome="mais" />Novo registro</a>
             )}
@@ -303,11 +237,12 @@ function Inicio({ usuario, conta, papeis, vinculada, secoes, podeRegistrar }) {
                     <dl className="lista-dados">
                         <div><dt>Nome</dt><dd>{usuario.nome}</dd></div>
                         <div><dt>E-mail</dt><dd className="quebra">{usuario.email}</dd></div>
+                        <div><dt>Organização</dt><dd>{organizacao?.nome_fantasia ?? "—"}<span className="celula-secundaria">{rotuloDaOrganizacao(vinculo.tipo)}</span></dd></div>
+                        <div><dt>Papel</dt><dd>{vinculo.administrador ? "Administrador" : "Funcionário"}</dd></div>
                         <div>
                             <dt>Carteira</dt>
                             <dd><span className="mono">{encurtar(conta)}</span><Copiar texto={conta} rotulo="Copiar carteira" /></dd>
                         </div>
-                        <div><dt>Funções</dt><dd>{funcoes.join(", ")}</dd></div>
                         <div><dt>Vínculo</dt><dd>{vinculada ? "Carteira vinculada à conta" : "Carteira não vinculada"}</dd></div>
                     </dl>
                 </section>
@@ -316,17 +251,22 @@ function Inicio({ usuario, conta, papeis, vinculada, secoes, podeRegistrar }) {
     );
 }
 
-// Tela entre o login e o painel: conectar a carteira e aguardar a funcao.
-function EtapasAcesso({
-    usuario, conta, verificando, conectando, erroCarteira, aoConectar,
-    vinculada, vinculando, aoVincular, avisoVinculo
-}) {
+// Tela entre o login e o painel: conectar a carteira e aguardar o vinculo
+// com uma organizacao.
+function EtapasAcesso({ acesso }) {
+    const { usuario, conta, verificando, conectando, erroCarteira, vinculada, vinculando, avisoVinculo } = acesso;
     const titulo = !conta
-        ? "Conecte a carteira da entidade"
-        : verificando ? "Verificando credenciais" : "Aguardando credenciamento";
+        ? "Conecte a sua carteira"
+        : verificando ? "Verificando o vínculo" : "Aguardando vínculo com uma organização";
 
     return (
         <Pagina titulo={titulo} descricao="O acesso institucional tem três etapas." largura="estreita">
+            {!contratoImplantado && (
+                <Aviso tipo="alerta" titulo="Contrato ainda não implantado">
+                    O contrato do KMChain ainda não foi implantado nesta rede. A consulta e o painel institucional
+                    ficam disponíveis depois do deploy.
+                </Aviso>
+            )}
             <ol className="etapas painel">
                 <li className="etapa-feita">
                     <span className="etapa-marcador" aria-hidden="true"><Icone nome="check" tamanho={12} /></span>
@@ -346,8 +286,8 @@ function EtapasAcesso({
                             </p>
                         ) : (
                             <>
-                                <p className="etapa-texto">A carteira identifica sua entidade ao registrar leituras. Usamos a MetaMask.</p>
-                                <Botao icone="carteira" carregando={conectando} onClick={aoConectar}>
+                                <p className="etapa-texto">A carteira assina os registros que você fizer pela sua organização. Usamos a MetaMask.</p>
+                                <Botao icone="carteira" carregando={conectando} onClick={acesso.conectar}>
                                     {conectando ? "Conectando…" : "Conectar carteira"}
                                 </Botao>
                                 {erroCarteira && <Aviso tipo="erro">{erroCarteira}</Aviso>}
@@ -361,27 +301,28 @@ function EtapasAcesso({
                         {conta && verificando && <Icone nome="carregando" tamanho={12} className="girando" />}
                     </span>
                     <div>
-                        <p className="etapa-titulo">Credenciamento</p>
+                        <p className="etapa-titulo">Vínculo com a organização</p>
                         {!conta && (
-                            <p className="etapa-texto">A administração do KmChain define a função da entidade: oficina, centro de vistoria ou DETRAN.</p>
+                            <p className="etapa-texto">O DETRAN credencia a organização e define o administrador; o administrador vincula os funcionários.</p>
                         )}
-                        {conta && verificando && <p className="etapa-texto">Verificando as funções desta carteira…</p>}
+                        {conta && verificando && <p className="etapa-texto">Verificando o vínculo desta carteira…</p>}
                         {conta && !verificando && (
                             <>
                                 <p className="etapa-texto">
-                                    Esta carteira ainda não tem uma função atribuída. Vincule-a à sua conta e informe
-                                    o endereço abaixo à administração do KmChain, que define se a entidade é oficina,
-                                    centro de vistoria ou DETRAN.
+                                    Esta carteira ainda não está vinculada a uma organização. Vincule-a à sua conta e
+                                    informe o seu e-mail ao administrador da sua organização. Se você é o
+                                    administrador indicado, informe-o ao DETRAN.
                                 </p>
                                 <p className="carteira-destaque">
-                                    <span className="mono quebra">{conta}</span>
-                                    <Copiar texto={conta} rotulo="Copiar endereço da carteira" />
+                                    <span className="mono quebra">{usuario.email}</span>
+                                    <Copiar texto={usuario.email} rotulo="Copiar e-mail da conta" />
                                 </p>
                                 {!vinculada && (
-                                    <Botao variante="secundario" carregando={vinculando} onClick={aoVincular}>
+                                    <Botao variante="secundario" carregando={vinculando} onClick={acesso.vincular}>
                                         Vincular esta carteira à minha conta
                                     </Botao>
                                 )}
+                                {vinculada && <Botao variante="secundario" onClick={acesso.recarregar}>Verificar de novo</Botao>}
                                 {avisoVinculo && <Aviso tipo={avisoVinculo.tipo}>{avisoVinculo.texto}</Aviso>}
                             </>
                         )}

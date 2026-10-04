@@ -1,62 +1,62 @@
 import { useMemo, useState } from "react";
+import { linkTransacao } from "../lib/blockchain";
 import { abrirDocumento } from "../lib/documentos";
 import { mensagemDeErro } from "../lib/erros";
-import { correcoesVerificaveis as calcularVerificaveis, origemDoRegistro } from "../lib/origem";
-import {
-    TIPOS, TIPO, dataCurta, dataDe, dataHora, encurtar, numero, rotulosPapel, temDocumento
-} from "../lib/formato";
+import { dataCurta, dataHora, encurtar, numero, temDocumento } from "../lib/formato";
+import { foiCorrigido } from "../lib/historico";
 import Botao from "../ui/Botao";
 import Copiar from "../ui/Copiar";
 import Icone from "../ui/Icone";
 import EtiquetaQr from "./EtiquetaQr";
 
-// Dossie do veiculo: identificacao, resumo e a linha do tempo. A
-// quilometragem e o dado principal de cada registro; hash, carteira e
-// comprovante ficam dentro de "Ver detalhes".
-export default function Historico({ chassi, veiculo, identificacao, historico, conforme, possuiAtipicas, entidades, institucional }) {
-    const total = historico.length;
-    const correcoes = Number(veiculo.totalCorrecoes);
-    // Ver lib/origem.js: quando nao da para saber quais registros do tipo
-    // correcao sao reais, nenhum e atribuido ao DETRAN.
-    const correcoesVerificaveis = calcularVerificaveis(historico, correcoes);
+// Nome da organizacao na data do evento: o identificador gravado em cadeia
+// nao muda, mas o nome pode ter mudado depois.
+function nomeNaData(organizacao, data) {
+    const nomes = organizacao.nomes ?? [];
+    const vigente = [...nomes].reverse().find((n) => new Date(n.desde) <= data) ?? nomes[0];
+    return vigente?.nome ?? organizacao.nome_fantasia;
+}
 
-    // Avanco em relacao a leitura valida anterior (leituras contestadas nao
-    // entram na conta). Depois, do mais recente para o mais antigo.
-    const eventos = useMemo(() => {
+// Dossie do veiculo: identificacao, resumo, a linha do tempo e os locais dos
+// registros. Os eventos vem da blockchain; identificacao do veiculo e nomes
+// das organizacoes vem do cadastro do KMChain.
+export default function Historico({ historico, identificacao, complementos, organizacoes, municipios, institucional }) {
+    const { chassi, eventos } = historico;
+    const total = eventos.length;
+
+    // Avanco em relacao ao registro valido anterior (os corrigidos nao entram
+    // na conta). Depois, do mais recente para o mais antigo.
+    const linhas = useMemo(() => {
         const lista = [];
         let anterior = null;
-        for (const [indice, leitura] of historico.entries()) {
-            const quilometragem = Number(leitura.quilometragem);
-            const tipo = Number(leitura.tipo);
+        eventos.forEach((evento, posicao) => {
+            const corrigido = foiCorrigido(evento);
             lista.unshift({
-                indice,
-                quilometragem,
-                tipo,
-                avanco: anterior === null || leitura.contestada || tipo === TIPO.CORRECAO ? null : quilometragem - anterior,
-                data: dataDe(leitura.data),
-                entidade: leitura.entidade,
-                hashDocumento: leitura.hashDocumento,
-                atipica: leitura.atipica,
-                contestada: leitura.contestada
+                ...evento,
+                posicao,
+                avanco: anterior === null || corrigido || evento.correcao ? null : evento.km - anterior
             });
-            if (!leitura.contestada) anterior = quilometragem;
-        }
+            if (!corrigido) anterior = evento.km;
+        });
         return lista;
-    }, [historico]);
+    }, [eventos]);
+
+    const organizacaoDe = (evento) => organizacoes?.[evento.organizacao] ?? null;
+    const localDe = (evento) => (municipios ? municipios.rotuloDoMunicipio(evento.municipio) : null);
 
     return (
         <article className="dossie">
             <header className="dossie-cabecalho">
                 <p className="sobretitulo">Veículo consultado</p>
                 <h1 className="dossie-titulo">
-                    {identificacao ? `${identificacao.marca_nome} ${identificacao.modelo}` : veiculo.modelo}
+                    {identificacao ? `${identificacao.marca_nome} ${identificacao.modelo}` : "Veículo sem identificação cadastrada"}
                 </h1>
                 <dl className="dossie-meta">
                     <div>
                         <dt>Chassi</dt>
                         <dd><span className="mono">{chassi}</span><Copiar texto={chassi} rotulo="Copiar chassi" /></dd>
                     </div>
-                    {identificacao ? (
+                    {identificacao && (
                         <>
                             <div>
                                 <dt>Placa</dt>
@@ -71,16 +71,11 @@ export default function Historico({ chassi, veiculo, identificacao, historico, c
                                 <dd>{identificacao.ano_fabricacao} / {identificacao.ano_modelo}</dd>
                             </div>
                         </>
-                    ) : (
-                        <div>
-                            <dt>Ano-modelo</dt>
-                            <dd>{Number(veiculo.ano)}</dd>
-                        </div>
                     )}
                 </dl>
                 {identificacao && (
                     <p className="dossie-nota">
-                        Placa e UF vigentes, informadas pelo DETRAN. Ficam no cadastro do KMChain, não na blockchain.
+                        Marca, modelo, anos, placa e UF vêm do cadastro do KMChain, informados pelo DETRAN. Não ficam na blockchain.
                     </p>
                 )}
             </header>
@@ -89,44 +84,38 @@ export default function Historico({ chassi, veiculo, identificacao, historico, c
                 <dl className="resumo-faixa">
                     <div className="resumo-item resumo-principal">
                         <dt>Última quilometragem</dt>
-                        <dd className="resumo-valor">{numero(veiculo.ultimaKm)}<span> km</span></dd>
+                        <dd className="resumo-valor">{numero(historico.ultimaKm)}<span> km</span></dd>
                     </div>
                     <div className="resumo-item">
-                        <dt>Último registro em cadeia</dt>
-                        <dd className="resumo-valor">{dataCurta(dataDe(veiculo.ultimaData))}</dd>
+                        <dt>Último evento</dt>
+                        <dd className="resumo-valor">{dataCurta(historico.ultimaData)}</dd>
                     </div>
                     <div className="resumo-item">
                         <dt>Registros</dt>
-                        <dd className="resumo-valor">{numero(veiculo.totalLeituras)}</dd>
+                        <dd className="resumo-valor">{numero(total)}</dd>
                     </div>
                 </dl>
 
                 <ul className="resumo-notas">
                     {total > 1 && (
-                        <li className={conforme ? "nota-positiva" : ""}>
-                            <Icone nome={conforme ? "check" : "info"} tamanho={16} />
-                            {conforme
-                                ? "Todos os registros após o cadastro têm comprovante anexado."
-                                : "Há registros sem comprovante anexado."}
+                        <li className={historico.semComprovante ? "" : "nota-positiva"}>
+                            <Icone nome={historico.semComprovante ? "info" : "check"} tamanho={16} />
+                            {historico.semComprovante
+                                ? "Há registros sem comprovante anexado."
+                                : "Todos os registros após o cadastro têm comprovante anexado."}
                         </li>
                     )}
-                    {possuiAtipicas && (
+                    {historico.possuiAtipicas && (
                         <li className="nota-alerta">
                             <Icone nome="alerta" tamanho={16} />
-                            Há leituras com avanço acima do esperado, confirmadas pela entidade responsável.
+                            Há registros com avanço acima do esperado, confirmados por quem registrou.
                         </li>
                     )}
-                    {!correcoesVerificaveis && (
-                        <li className="nota-alerta">
-                            <Icone nome="alerta" tamanho={16} />
-                            Há registros do tipo correção que não foram feitos pela função de correção do DETRAN.
-                        </li>
-                    )}
-                    {correcoes > 0 && (
+                    {historico.correcoes > 0 && (
                         <li>
                             <Icone nome="info" tamanho={16} />
-                            {correcoes === 1 ? "1 correção feita" : `${correcoes} correções feitas`} pelo DETRAN.
-                            As leituras originais continuam no histórico.
+                            {historico.correcoes === 1 ? "1 correção feita" : `${historico.correcoes} correções feitas`} pelo DETRAN.
+                            Os registros originais continuam no histórico.
                         </li>
                     )}
                 </ul>
@@ -139,31 +128,58 @@ export default function Historico({ chassi, veiculo, identificacao, historico, c
                 </div>
 
                 <ol className="linha-do-tempo">
-                    {eventos.map((evento, posicao) => (
+                    {linhas.map((evento, i) => (
                         <EventoHistorico
                             key={evento.indice}
                             evento={evento}
-                            recente={posicao === 0}
+                            recente={i === 0}
                             total={total}
-                            papeis={entidades[evento.entidade.toLowerCase()]}
-                            correcoesVerificaveis={correcoesVerificaveis}
+                            organizacao={organizacaoDe(evento)}
+                            local={localDe(evento)}
+                            complemento={complementos?.[evento.indice]}
                             institucional={institucional}
                         />
                     ))}
                 </ol>
             </section>
 
+            {eventos.length > 0 && (
+                <section className="historico" aria-labelledby="titulo-locais">
+                    <div className="secao-titulo">
+                        <h2 id="titulo-locais">Histórico de locais dos registros</h2>
+                        <p>Do mais antigo para o mais recente</p>
+                    </div>
+                    <ol className="locais">
+                        {eventos.map((e) => (
+                            <li key={e.indice}>
+                                <span className="locais-cidade">{localDe(e) ?? "…"}</span>
+                                <span className="locais-meta">{numero(e.km)} km · {dataHora(e.dataEvento)} · {e.rotulo}</span>
+                            </li>
+                        ))}
+                    </ol>
+                    <p className="dossie-nota">
+                        São os locais onde os eventos foram registrados no KMChain. Não representam o trajeto do
+                        veículo nem um rastreamento.
+                    </p>
+                </section>
+            )}
+
             <section className="dossie-rodape">
                 <p className="dossie-nota">
-                    Os registros não podem ser alterados nem apagados. Uma correção do DETRAN é
-                    adicionada ao histórico, e a leitura original continua visível.
+                    Depois de gravado na blockchain, um registro não pode ser alterado nem apagado. Uma correção
+                    aprovada pelo DETRAN entra como novo evento, e o registro original continua visível.
                 </p>
                 <p className="dossie-nota">
-                    Cada leitura foi informada por uma carteira credenciada no KmChain, e a data
-                    mostrada é a do registro em cadeia. O histórico não comprova que o hodômetro
-                    marcava o valor real em cada leitura, nem que não houve adulteração antes do
-                    primeiro registro ou entre registros. Credenciamento no KmChain não é
-                    credenciamento oficial por órgão público.
+                    “Localização verificada” indica que o dispositivo usado no registro informou uma posição
+                    compatível com o endereço cadastrado da organização. É um indício adicional, não uma prova de
+                    presença: a posição informada pelo dispositivo pode ser imprecisa ou manipulada.
+                </p>
+                <p className="dossie-nota">
+                    A blockchain protege a integridade dos registros depois de inseridos; ela não comprova que o
+                    hodômetro marcava o valor real em cada evento, nem que não houve adulteração antes do primeiro
+                    registro ou entre registros. Cada evento foi informado por um usuário vinculado a uma organização
+                    credenciada no KMChain, um protótipo acadêmico: esse credenciamento não é oficial, e o uso do
+                    nome DETRAN não indica vínculo com órgão público.
                 </p>
                 <details className="recolhivel">
                     <summary>
@@ -178,32 +194,26 @@ export default function Historico({ chassi, veiculo, identificacao, historico, c
     );
 }
 
-function EventoHistorico({ evento, recente, total, papeis, correcoesVerificaveis, institucional }) {
+// `complemento` vem do cadastro do KMChain: a transacao do evento e se a
+// localizacao do dispositivo foi verificada no registro (sem coordenadas).
+function EventoHistorico({ evento, recente, total, organizacao, local, complemento, institucional }) {
+    const transacao = complemento?.tx_hash;
     const [aberto, setAberto] = useState(false);
     const [abrindo, setAbrindo] = useState(false);
     const [erroDocumento, setErroDocumento] = useState("");
 
-    // Funcao na epoca so e garantida quando o contrato a exigiu (ver
-    // lib/origem.js); fora isso, a funcao exibida e a ATUAL, rotulada assim.
-    const origem = origemDoRegistro(evento.tipo, evento.indice, correcoesVerificaveis);
-    const exigeDetran = origem === "detran";
-    const tipoSemGarantia = origem === "sem-garantia";
-    const correcaoReal = exigeDetran && evento.tipo === TIPO.CORRECAO;
-    const funcaoAtual = papeis
-        ? rotulosPapel(papeis).filter((r) => r !== "Administração").join(" · ") || "sem função ativa"
-        : null;
-    const responsavel = exigeDetran
-        ? "DETRAN"
-        : funcaoAtual ? `Carteira credenciada · função atual: ${funcaoAtual}` : "Carteira credenciada";
+    const corrigido = foiCorrigido(evento);
     const comDocumento = temDocumento(evento.hashDocumento);
     const idDetalhes = `evento-${evento.indice}-detalhes`;
+    const responsavel = organizacao ? nomeNaData(organizacao, evento.dataRegistro) : `Organização ${evento.organizacao}`;
+    const nomeMudou = organizacao && responsavel !== organizacao.nome_fantasia;
 
     const classes = [
         "evento",
         recente && "evento-recente",
-        evento.contestada && "evento-contestado",
+        corrigido && "evento-contestado",
         evento.atipica && "evento-atipico",
-        evento.tipo === TIPO.CORRECAO && "evento-correcao"
+        evento.correcao && "evento-correcao"
     ].filter(Boolean).join(" ");
 
     async function abrir() {
@@ -221,44 +231,54 @@ function EventoHistorico({ evento, recente, total, papeis, correcoesVerificaveis
     return (
         <li className={classes}>
             <div className="evento-data">
-                <span className="visualmente-oculto">Registrado em cadeia em </span>
-                <time dateTime={evento.data.toISOString()}>{dataCurta(evento.data)}</time>
+                <span className="visualmente-oculto">Evento em </span>
+                <time dateTime={evento.dataEvento.toISOString()}>{dataCurta(evento.dataEvento)}</time>
                 {recente && <span className="evento-rotulo-recente">Mais recente</span>}
             </div>
             <span className="evento-marcador" aria-hidden="true" />
             <div className="evento-corpo">
+                <p className="evento-tipo evento-tipo-destaque">
+                    {evento.rotulo}
+                </p>
                 <p className="evento-km">
-                    <span className="evento-km-valor">{numero(evento.quilometragem)}</span> km
+                    <span className="evento-km-valor">{numero(evento.km)}</span> km
                     {evento.avanco !== null && evento.avanco > 0 && (
                         <span className="evento-avanco">+{numero(evento.avanco)} km</span>
                     )}
                 </p>
-                <p className="evento-tipo">
-                    {correcaoReal ? "Correção do DETRAN" : tipoSemGarantia ? `Registro marcado como ${TIPOS[evento.tipo].toLowerCase()}` : TIPOS[evento.tipo]}
-                </p>
+                <p className="evento-entidade">{dataHora(evento.dataEvento)}</p>
+                <p className="evento-entidade">{local ?? "Carregando local…"}</p>
                 <p className="evento-entidade">
-                    {responsavel}
-                    <span className="mono">{encurtar(evento.entidade)}</span>
+                    <span>Registrado por: <strong>{responsavel}</strong></span>
+                    {nomeMudou && <span>(hoje {organizacao.nome_fantasia})</span>}
                 </p>
-
-                {evento.contestada && (
-                    <p className="evento-nota">
-                        <Icone nome="info" tamanho={15} />
-                        Leitura corrigida pelo DETRAN. Mantida no histórico para consulta.
+                <p className="evento-verificado">
+                    <Icone nome="check" tamanho={14} />
+                    Registro verificado na blockchain
+                </p>
+                {complemento?.localizacao_verificada && (
+                    <p className="evento-verificado evento-local-verificado">
+                        <Icone nome="check" tamanho={14} />
+                        Localização verificada no momento do registro
                     </p>
                 )}
-                {tipoSemGarantia && (
-                    <p className="evento-nota evento-nota-alerta">
-                        <Icone nome="alerta" tamanho={15} />
-                        {evento.tipo === TIPO.CADASTRO
-                            ? "Não é o cadastro original do veículo: foi registrado como leitura comum por uma carteira credenciada."
-                            : "Não foi possível confirmar que esta é uma correção do DETRAN. Trate como leitura comum de carteira credenciada."}
+
+                {evento.correcao && evento.referencia !== null && (
+                    <p className="evento-nota">
+                        <Icone nome="info" tamanho={15} />
+                        Correção do registro {evento.referencia + 1}, validada pelo DETRAN.
+                    </p>
+                )}
+                {corrigido && (
+                    <p className="evento-nota">
+                        <Icone nome="info" tamanho={15} />
+                        Registro corrigido pelo registro {evento.corrigidoPor + 1}. Mantido no histórico, sem alteração.
                     </p>
                 )}
                 {evento.atipica && (
                     <p className="evento-nota evento-nota-alerta">
                         <Icone nome="alerta" tamanho={15} />
-                        Avanço acima do esperado para o período, confirmado pela entidade.
+                        Avanço acima do esperado para o período, confirmado por quem registrou.
                     </p>
                 )}
 
@@ -277,17 +297,19 @@ function EventoHistorico({ evento, recente, total, papeis, correcoesVerificaveis
                     <div id={idDetalhes} className="evento-detalhes">
                         <dl className="lista-dados lista-dados-compacta">
                             <div>
-                                <dt>Registrado em cadeia</dt>
-                                <dd>{dataHora(evento.data)}</dd>
+                                <dt>Data e hora do evento</dt>
+                                <dd>{dataHora(evento.dataEvento)}</dd>
                             </div>
                             <div>
-                                <dt>Função na época</dt>
-                                <dd>{exigeDetran ? "DETRAN (exigido pelo contrato)" : "Credenciada (DETRAN, vistoria ou oficina)"}</dd>
+                                <dt>Data e hora da transação</dt>
+                                <dd>{dataHora(evento.dataRegistro)}</dd>
                             </div>
-                            <div>
-                                <dt>Função atual</dt>
-                                <dd>{funcaoAtual ?? "—"}</dd>
-                            </div>
+                            {organizacao && (
+                                <div>
+                                    <dt>Credenciamento</dt>
+                                    <dd>Organização ativa na data do registro (exigido pelo contrato){organizacao.situacao === "suspensa" && " · hoje suspensa"}</dd>
+                                </div>
+                            )}
                             <div>
                                 <dt>Comprovante</dt>
                                 <dd>
@@ -301,17 +323,30 @@ function EventoHistorico({ evento, recente, total, papeis, correcoesVerificaveis
                             </div>
                             <div>
                                 <dt>Registro</dt>
-                                <dd>{evento.indice + 1} de {total}</dd>
+                                <dd>{evento.posicao + 1} de {total}</dd>
                             </div>
                         </dl>
                         {erroDocumento && <p className="campo-erro" role="alert"><Icone nome="alerta" tamanho={14} />{erroDocumento}</p>}
 
-                        <p className="evento-detalhes-subtitulo">Dados técnicos</p>
+                        <p className="evento-detalhes-subtitulo">Dados técnicos (em cadeia)</p>
                         <dl className="lista-dados lista-dados-compacta">
+                            <div><dt>Identificador da organização</dt><dd className="numero">{evento.organizacao}</dd></div>
+                            <div><dt>Código IBGE do município</dt><dd className="numero">{evento.municipio}</dd></div>
                             <div>
-                                <dt>Carteira da entidade</dt>
-                                <dd><span className="mono quebra">{evento.entidade}</span><Copiar texto={evento.entidade} rotulo="Copiar carteira" /></dd>
+                                <dt>Carteira do responsável</dt>
+                                <dd><span className="mono quebra">{evento.responsavel}</span><Copiar texto={evento.responsavel} rotulo="Copiar carteira" /></dd>
                             </div>
+                            {transacao && (
+                                <div>
+                                    <dt>Transação</dt>
+                                    <dd>
+                                        <span className="mono">{encurtar(transacao, 10, 8)}</span>
+                                        <a href={linkTransacao(transacao)} target="_blank" rel="noreferrer" className="link-externo">
+                                            Abrir no explorador <Icone nome="externo" tamanho={13} />
+                                        </a>
+                                    </dd>
+                                </div>
+                            )}
                             {comDocumento && (
                                 <div>
                                     <dt>Hash do comprovante</dt>

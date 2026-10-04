@@ -1,7 +1,4 @@
-// Formatacao e constantes compartilhadas pelas telas. A ordem de TIPOS segue
-// o enum TipoEvento do contrato - o indice e o valor gravado em cadeia.
-export const TIPOS = ["Cadastro", "Vistoria", "Revisão", "Transferência", "Sinistro", "Correção"];
-export const TIPO = { CADASTRO: 0, TRANSFERENCIA: 3, CORRECAO: 5 };
+// Formatacao e constantes compartilhadas pelas telas.
 
 export const HASH_VAZIO = "0x" + "0".repeat(64);
 export const temDocumento = (hash) => Boolean(hash) && hash !== HASH_VAZIO;
@@ -42,19 +39,6 @@ export { normalizarChassi, problemaDoChassi as validarChassi } from "./chassi";
 
 export const carteiraValida = (valor) => /^0x[0-9a-fA-F]{40}$/.test(valor);
 
-// Funcoes em cadeia de uma carteira, do maior para o menor alcance.
-const ROTULOS_PAPEL = [
-    ["detran", "DETRAN"],
-    ["vistoria", "Centro de vistoria"],
-    ["oficina", "Oficina"],
-    ["admin", "Administração"]
-];
-
-export function rotulosPapel(papeis) {
-    if (!papeis) return [];
-    return ROTULOS_PAPEL.filter(([chave]) => papeis[chave]).map(([, rotulo]) => rotulo);
-}
-
 export function saudacao(agora = new Date()) {
     const hora = agora.getHours();
     if (hora < 12) return "Bom dia";
@@ -70,3 +54,6 @@ export function agoraLocal(data = new Date()) {
 
 // Converte o valor do datetime-local (horario local) para ISO (UTC).
 export const localParaIso = (valor) => (valor ? new Date(valor).toISOString() : "");
+
+// Valor do datetime-local em segundos (o formato de data gravado em cadeia).
+export const localParaSegundos = (valor) => Math.floor(new Date(valor).getTime() / 1000);

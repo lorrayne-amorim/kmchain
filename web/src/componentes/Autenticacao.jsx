@@ -8,10 +8,10 @@ import Campo from "../ui/Campo";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Primeira camada do painel profissional: login e senha, guardados no banco.
-// Criar a conta aqui NAO credencia ninguem em cadeia nem define o que a
-// pessoa representa - so cadastra o login. Quem decide a funcao (oficina,
-// vistoria ou DETRAN) e o DETRAN, depois, pela carteira que a pessoa vincular.
+// Primeira camada do painel institucional: login e senha, guardados no banco.
+// Criar a conta aqui NAO da acesso a nada - so cadastra o login. O acesso vem
+// do vinculo da carteira da pessoa com uma organizacao: o DETRAN define o
+// administrador de cada organizacao, e o administrador vincula os funcionarios.
 export default function Autenticacao({ aoAutenticar }) {
     const [modo, setModo] = useState("entrar"); // entrar | criar
     const [nome, setNome] = useState("");
@@ -63,7 +63,7 @@ export default function Autenticacao({ aoAutenticar }) {
     return (
         <div className="acesso">
             <h1 className="pagina-titulo">Acesso institucional</h1>
-            <p className="pagina-descricao">Para DETRAN, centros de vistoria e oficinas credenciadas.</p>
+            <p className="pagina-descricao">Para o DETRAN e as organizações credenciadas: oficinas, empresas de vistoria e seguradoras.</p>
 
             <div className="painel acesso-painel">
                 <div className="segmentos" role="group" aria-label="Tipo de acesso">
@@ -102,8 +102,8 @@ export default function Autenticacao({ aoAutenticar }) {
 
             <p className="acesso-nota">
                 {criando
-                    ? "Depois de criar a conta, conecte a carteira da entidade. A administração do KmChain define a função dela: oficina, centro de vistoria ou DETRAN."
-                    : "O acesso tem duas etapas: login e carteira da entidade credenciada no KmChain."}
+                    ? "Depois de criar a conta, conecte e vincule a sua carteira. O acesso é liberado quando o administrador da sua organização (ou o DETRAN, se você for o administrador) vincular a sua conta."
+                    : "O acesso tem duas etapas: login e a carteira vinculada a uma organização credenciada no KMChain. Quem só quer consultar um veículo não precisa de conta."}
             </p>
         </div>
     );

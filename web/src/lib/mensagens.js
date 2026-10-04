@@ -9,8 +9,8 @@ export const JANELA_ASSINATURA_MS = 2 * 60 * 1000;
 export const mensagemContas = (email, emitidoEm) =>
     `KmChain: listar contas cadastradas pela conta ${email} em ${emitidoEm}`;
 
-export const mensagemPrivado = (chassi, email, emitidoEm) =>
-    `KmChain: consultar registros privados de ${chassi} pela conta ${email} em ${emitidoEm}`;
+export const mensagemDadosComplementares = (chassi, email, emitidoEm) =>
+    `KmChain: consultar dados complementares de ${chassi} pela conta ${email} em ${emitidoEm}`;
 
 export const mensagemDocumento = (hash, email, emitidoEm) =>
     `KmChain: acesso ao documento ${hash} pela conta ${email} em ${emitidoEm}`;

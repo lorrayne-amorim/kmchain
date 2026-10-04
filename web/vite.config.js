@@ -1,13 +1,12 @@
-import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// As rotas em api/*.js sao Serverless Functions da Vercel (padrao
-// `handler(req, res)`), que so existem quando o Vercel monta o servidor.
-// Este plugin recria o mesmo contrato durante o `npm run dev`: qualquer
-// /api/<caminho> e servido por api/<caminho>.js (GET ou POST), com as
-// variaveis do .env.local disponiveis em process.env - como na Vercel.
+// As rotas /api sao atendidas por uma Serverless Function da Vercel
+// (api/index.js), que so existe quando a Vercel monta o servidor. Este plugin
+// recria o mesmo contrato durante o `npm run dev`: toda requisicao /api vai
+// para o roteador (servidor/rotas.js), com as variaveis do .env.local
+// disponiveis em process.env - como na Vercel.
 function apiDev(env) {
   return {
     name: 'api-dev',
@@ -21,7 +20,7 @@ function apiDev(env) {
       server.middlewares.use((req, res, next) => {
         let caminho = req.url ?? ''
         try { caminho = decodeURIComponent(caminho) } catch { /* mantem o original */ }
-        if (/(^|[\\/])\.env/i.test(caminho) || /[\\/]api[\\/]_/.test(caminho)) {
+        if (/(^|[\\/])\.env/i.test(caminho) || /^[\\/]servidor[\\/]/.test(caminho)) {
           res.statusCode = 404
           return res.end()
         }
@@ -30,10 +29,7 @@ function apiDev(env) {
 
       server.middlewares.use('/api', async (req, res, next) => {
         const caminho = new URL(req.url, 'http://local').pathname.replace(/^\/+|\/+$/g, '')
-        // Arquivos com "_" sao modulos internos, nao rotas.
         if (!/^[a-z0-9-]+(\/[a-z0-9-]+)*$/.test(caminho)) return next()
-        const arquivo = path.join(server.config.root, 'api', `${caminho}.js`)
-        if (!existsSync(arquivo)) return next()
 
         try {
           if (req.method === 'POST' || req.method === 'PATCH') {
@@ -57,8 +53,8 @@ function apiDev(env) {
           }
           res.send = (dados) => res.end(dados)
 
-          const { default: handler } = await server.ssrLoadModule(arquivo)
-          await handler(req, res)
+          const { rotear } = await server.ssrLoadModule(path.join(server.config.root, 'servidor', 'rotas.js'))
+          await rotear(req, res)
         } catch (erro) {
           console.error(`[api-dev] ${caminho}:`, erro)
           res.statusCode = 500
