@@ -16,7 +16,7 @@ configurarSegredos();
 const { definirExecutor, bd } = await import("../servidor/nucleo/banco.js");
 const { criarToken } = await import("../servidor/nucleo/sessao.js");
 const { encerrarProvedor } = await import("../servidor/nucleo/cadeia.js");
-const { mensagemAlteracao, mensagemContas, mensagemDadosComplementares, mensagemDocumento, mensagemVinculo } = await import("../src/lib/mensagens.js");
+const { mensagemAlteracao, mensagemContas, mensagemDadosComplementares, mensagemDocumento, mensagemRedefinirSenha, mensagemVinculo } = await import("../src/lib/mensagens.js");
 const { chaveDoChassi, chassiDoLink, linkConsulta, normalizarChassi } = await import("../src/lib/chassi.js");
 const { rotuloDoMunicipio } = await import("../src/lib/municipios.js");
 
@@ -274,6 +274,66 @@ describe("vínculo de carteira à conta", () => {
         assert.equal(sessao.corpo.vinculo.ativo, false);
         assert.equal(sessao.corpo.organizacao, null);
         await bd("UPDATE usuarios SET carteira = NULL WHERE id = $1", [contas.semCarteira.id]);
+    });
+
+    test("conta com vínculo ativo não troca de carteira: a carteira vinculada sem conta continua aguardando a conta dela", async () => {
+        // o DETRAN vincula a propria equipe a carteira de quem ainda nao tem conta
+        const pessoa = Wallet.createRandom();
+        await (await como(0).definirFuncionario(pessoa.address, true)).wait();
+        await pedir("funcionarios/sincronizar", contas.admin, { carteira: pessoa.address });
+        const aguardando = async () => (await obter("funcionarios", contas.admin)).corpo.aguardando.map((a) => a.carteira);
+        assert.deepEqual(await aguardando(), [pessoa.address.toLowerCase()]);
+
+        // a administradora da vistoria, com a carteira dela ativa na vistoria, tenta ficar com essa carteira
+        const emitidoEm = Date.now();
+        const assinatura = await pessoa.signMessage(mensagemVinculo(pessoa.address, contas.vistoria.email, emitidoEm));
+        const r = await pedir("auth/vincular-carteira", contas.vistoria, { carteira: pessoa.address, emitidoEm, assinatura });
+        assert.deepEqual([r.status, r.corpo.codigo], [409, "carteira_com_vinculo"]);
+        assert.equal((await bd("SELECT carteira FROM usuarios WHERE id = $1", [contas.vistoria.id])).rows[0].carteira, contas.vistoria.carteira);
+        assert.equal((await obter("auth/eu", contas.vistoria)).corpo.organizacao.nome_fantasia, "Vistoria XYZ");
+        assert.deepEqual(await aguardando(), [pessoa.address.toLowerCase()]);
+
+        // vincular de novo a propria carteira continua permitido
+        const mesma = await assinar(contas.vistoria.i, (m) => mensagemVinculo(contas.vistoria.carteira, contas.vistoria.email, m));
+        assert.equal((await pedir("auth/vincular-carteira", contas.vistoria, { carteira: contas.vistoria.carteira, ...mesma })).status, 200);
+
+        await (await como(0).definirFuncionario(pessoa.address, false)).wait();
+        await pedir("funcionarios/sincronizar", contas.admin, { carteira: pessoa.address });
+        assert.deepEqual(await aguardando(), []);
+    });
+
+    test("esqueci a senha: só a carteira vinculada à conta redefine; a senha antiga deixa de valer", async () => {
+        const pessoa = Wallet.createRandom();
+        const email = "esqueci@exemplo.test";
+        const conta = await pedir("auth/cadastrar", null, { nome: "Esqueci Teste", email, senha: "senha-antiga" });
+        const nova = { id: conta.corpo.usuario.id, nome: "Esqueci Teste", email };
+        const redefinir = async (assinante, extra = {}) => {
+            const emitidoEm = Date.now();
+            const assinatura = await assinante.signMessage(mensagemRedefinirSenha(extra.email ?? email, emitidoEm));
+            return pedir("auth/redefinir-senha", null, { email, senha: "senha-nova-1", emitidoEm, assinatura, ...extra });
+        };
+        // conta ainda sem carteira: nao ha quem prove a posse
+        assert.equal((await redefinir(pessoa)).corpo.codigo, "redefinicao_recusada");
+
+        const emitidoEm = Date.now();
+        const assinatura = await pessoa.signMessage(mensagemVinculo(pessoa.address, email, emitidoEm));
+        assert.equal((await pedir("auth/vincular-carteira", nova, { carteira: pessoa.address, emitidoEm, assinatura })).status, 200);
+
+        const outra = await redefinir(Wallet.createRandom());
+        assert.deepEqual([outra.status, outra.corpo.codigo], [403, "redefinicao_recusada"]);
+        // e-mail inexistente recebe a mesma resposta
+        const inexistente = await redefinir(pessoa, { email: "ninguem@exemplo.test" });
+        assert.deepEqual([inexistente.status, inexistente.corpo.codigo], [403, "redefinicao_recusada"]);
+        assert.equal((await redefinir(pessoa, { senha: "curta" })).corpo.codigo, "senha_invalida");
+        assert.equal((await redefinir(pessoa, { emitidoEm: Date.now() - 10 * 60 * 1000 })).corpo.codigo, "assinatura_expirada");
+        assert.equal((await pedir("auth/entrar", null, { email, senha: "senha-antiga" })).status, 200);
+
+        const r = await redefinir(pessoa);
+        assert.equal(r.status, 200);
+        assert.equal(r.corpo.usuario.email, email);
+        assert.doesNotMatch(JSON.stringify(r.corpo), /senha/i);
+        assert.equal((await pedir("auth/entrar", null, { email, senha: "senha-nova-1" })).status, 200);
+        assert.equal((await pedir("auth/entrar", null, { email, senha: "senha-antiga" })).status, 401);
     });
 });
 
@@ -542,6 +602,53 @@ describe("organizações: cadastro e credenciamento pelo DETRAN", () => {
         await pedir("funcionarios/sincronizar", contas.vistoria, { carteira: pessoa.address });
     });
 
+    test("remoção de organização pendente: só o DETRAN; o cadastro é apagado e o CNPJ fica livre", async () => {
+        const dados = dadosDaOrganizacao("OFICINA", "Oficina Desistente", contas.semVinculo, "101112130001");
+        const criada = await pedir("organizacoes", contas.admin, dados);
+        assert.equal(criada.status, 201, JSON.stringify(criada.corpo));
+        const id = criada.corpo.organizacao.id;
+        assert.equal((await pedir("organizacoes/remover", contas.oficina, { id })).status, 403);
+
+        const r = await pedir("organizacoes/remover", contas.detran, { id });
+        assert.deepEqual([r.status, r.corpo.apagada], [200, true]);
+        assert.equal((await bd("SELECT 1 FROM organizacoes WHERE id = $1", [id])).rows.length, 0);
+        assert.equal((await pedir("organizacoes/remover", contas.detran, { id })).status, 404);
+        assert.ok((await acoesDaAuditoria()).includes("organizacao_removida"));
+        const deNovo = await pedir("organizacoes", contas.admin, dados);
+        assert.equal(deNovo.status, 201);
+        await pedir("organizacoes/remover", contas.detran, { id: deNovo.corpo.organizacao.id });
+    });
+
+    test("remoção de organização credenciada: exige a suspensão no contrato; sai da gestão e do mapa, e o histórico mantém o nome", async () => {
+        const pessoa = Wallet.createRandom();
+        const dados = { ...dadosDaOrganizacao("OFICINA", "Oficina Removida", contas.semCarteira, "121314150001"), administradorCarteira: pessoa.address };
+        delete dados.administradorEmail;
+        const criada = await pedir("organizacoes", contas.admin, dados);
+        assert.equal(criada.status, 201, JSON.stringify(criada.corpo));
+        const tx = await (await como(0).credenciarOrganizacao(criada.corpo.credenciamento.tipo, pessoa.address)).wait();
+        const o = (await pedir("organizacoes/credenciamento", contas.admin, { id: criada.corpo.organizacao.id, txHash: tx.hash })).corpo.organizacao;
+
+        // ativa no contrato: o DETRAN precisa suspender antes
+        const ativa = await pedir("organizacoes/remover", contas.detran, { id: o.id });
+        assert.deepEqual([ativa.status, ativa.corpo.codigo], [409, "organizacao_ativa"]);
+        await (await como(1).definirSituacaoDaOrganizacao(o.id_cadeia, false)).wait();
+        const r = await pedir("organizacoes/remover", contas.detran, { id: o.id });
+        assert.deepEqual([r.status, r.corpo.apagada], [200, false]);
+
+        const gestao = (await obter("organizacoes/gestao", contas.detran)).corpo.organizacoes;
+        assert.ok(!gestao.some((x) => x.id === o.id));
+        // a lista publica ainda traz o nome, para o historico dos veiculos, marcada como removida
+        const publicas = (await obter("organizacoes")).corpo.organizacoes;
+        const publica = publicas.find((x) => x.id === o.id);
+        assert.deepEqual([publica.nome_fantasia, publica.removida, publica.situacao], ["Oficina Removida", true, "suspensa"]);
+        assert.equal(publicas.find((x) => x.nome_fantasia === "Oficina ABC").removida, false);
+        assert.equal((await pedir("organizacoes/sincronizar", contas.detran, { id: o.id })).status, 404);
+        assert.equal((await pedir("organizacoes/remover", contas.detran, { id: o.id })).status, 404);
+        // o DETRAN nao remove a si mesmo
+        const detran = (await bd("SELECT id FROM organizacoes WHERE id_cadeia = 1")).rows[0];
+        assert.equal((await pedir("organizacoes/remover", contas.admin, { id: detran.id })).status, 404);
+    });
+
     test("o DETRAN também pode ter mais de um administrador", async () => {
         const detran = (await bd("SELECT id FROM organizacoes WHERE id_cadeia = 1")).rows[0];
         const papelDoAgente = async () => (await bd("SELECT papel FROM membros WHERE organizacao_id = $1 AND usuario_id = $2", [detran.id, contas.detran.id])).rows[0].papel;
@@ -620,6 +727,37 @@ describe("administrador e funcionários", () => {
         assert.equal(linha.ativo, false);
         assert.ok(linha.desativado_em instanceof Date);
         assert.ok((await acoesDaAuditoria()).includes("funcionario_desativado"));
+    });
+
+    test("remoção da equipe: só com o vínculo desativado no contrato; sai da lista e fica na auditoria", async () => {
+        const remover = (quem, corpo) => pedir("funcionarios/remover", quem, corpo);
+        const naEquipe = async (email) => (await obter("funcionarios", contas.oficina)).corpo.funcionarios.some((f) => f.email === email);
+        assert.equal(await naEquipe(contas.desativado.email), true);
+
+        assert.equal((await remover(contas.mecanico, { carteira: contas.desativado.carteira })).corpo.codigo, "apenas_administrador");
+        // administrador de outra organizacao nao alcanca a equipe da oficina
+        assert.equal((await remover(contas.vistoria, { carteira: contas.desativado.carteira, organizacaoId: organizacoes.oficina.id })).corpo.codigo, "outra_organizacao");
+        assert.equal((await remover(contas.vistoria, { carteira: contas.desativado.carteira })).corpo.codigo, "vinculo_nao_encontrado");
+        // ativo no contrato: precisa ser desativado antes
+        const ativo = await remover(contas.oficina, { carteira: contas.mecanico.carteira });
+        assert.deepEqual([ativo.status, ativo.corpo.codigo], [409, "vinculo_ativo"]);
+        assert.equal((await remover(contas.oficina, { carteira: contas.oficina.carteira })).corpo.codigo, "vinculo_ativo");
+
+        const r = await remover(contas.oficina, { carteira: contas.desativado.carteira });
+        assert.deepEqual([r.status, r.corpo.removido.nome], [200, contas.desativado.nome]);
+        assert.equal(await naEquipe(contas.desativado.email), false);
+        assert.equal(await naEquipe(contas.mecanico.email), true);
+        assert.ok((await acoesDaAuditoria()).includes("funcionario_removido"));
+        assert.equal((await remover(contas.oficina, { carteira: contas.desativado.carteira })).status, 404);
+        // entrar de novo nao recoloca na equipe quem saiu
+        assert.equal((await obter("auth/eu", contas.desativado)).corpo.organizacao, null);
+        assert.equal(await naEquipe(contas.desativado.email), false);
+
+        // o DETRAN remove, de outra organizacao, quem ja esta desativado
+        const equipeDaVistoria = (await obter(`funcionarios?organizacao=${organizacoes.vistoria.id}`, contas.detran)).corpo.funcionarios;
+        const vistoriador = equipeDaVistoria.find((f) => f.email === "vistoriador.novo@exemplo.test");
+        assert.equal(vistoriador.ativo, false);
+        assert.equal((await remover(contas.detran, { carteira: vistoriador.carteira, organizacaoId: organizacoes.vistoria.id })).status, 200);
     });
 });
 

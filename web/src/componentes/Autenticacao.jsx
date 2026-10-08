@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { criarConta, entrar } from "../lib/auth";
+import { criarConta, entrar, redefinirSenha } from "../lib/auth";
 import { mensagemDeErro } from "../lib/erros";
 import { focarPrimeiroErro } from "../lib/foco";
 import Aviso from "../ui/Aviso";
@@ -13,7 +13,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // do vinculo da carteira da pessoa com uma organizacao: o DETRAN define o
 // administrador de cada organizacao, e o administrador vincula os funcionarios.
 export default function Autenticacao({ aoAutenticar }) {
-    const [modo, setModo] = useState("entrar"); // entrar | criar
+    const [modo, setModo] = useState("entrar"); // entrar | criar | redefinir
     const [nome, setNome] = useState("");
     const [email, setEmail] = useState("");
     const [senha, setSenha] = useState("");
@@ -22,6 +22,8 @@ export default function Autenticacao({ aoAutenticar }) {
     const [enviando, setEnviando] = useState(false);
     const [erro, setErro] = useState("");
     const criando = modo === "criar";
+    const redefinindo = modo === "redefinir";
+    const senhaNova = criando || redefinindo;
 
     function trocarModo(novoModo) {
         setModo(novoModo);
@@ -33,9 +35,9 @@ export default function Autenticacao({ aoAutenticar }) {
         const novos = {};
         if (criando && nome.trim().length < 2) novos.nome = "Informe seu nome.";
         if (!EMAIL.test(email.trim())) novos.email = "Informe um e-mail válido.";
-        if (criando && senha.length < 8) novos.senha = "A senha precisa ter pelo menos 8 caracteres.";
-        if (!criando && !senha) novos.senha = "Informe sua senha.";
-        if (criando && senha !== confirmarSenha) novos.confirmarSenha = "As senhas não coincidem.";
+        if (senhaNova && senha.length < 8) novos.senha = "A senha precisa ter pelo menos 8 caracteres.";
+        if (!senhaNova && !senha) novos.senha = "Informe sua senha.";
+        if (senhaNova && senha !== confirmarSenha) novos.confirmarSenha = "As senhas não coincidem.";
         setErros(novos);
         if (Object.keys(novos).length > 0) focarPrimeiroErro();
         return Object.keys(novos).length === 0;
@@ -49,12 +51,13 @@ export default function Autenticacao({ aoAutenticar }) {
         setEnviando(true);
         try {
             const emailLimpo = email.trim().toLowerCase();
-            const { usuario } = criando
-                ? await criarConta(nome, emailLimpo, senha)
-                : await entrar(emailLimpo, senha);
-            aoAutenticar(usuario);
+            let resposta;
+            if (criando) resposta = await criarConta(nome, emailLimpo, senha);
+            else if (redefinindo) resposta = await redefinirSenha(emailLimpo, senha);
+            else resposta = await entrar(emailLimpo, senha);
+            aoAutenticar(resposta.usuario);
         } catch (falha) {
-            setErro(mensagemDeErro(falha, "Não foi possível entrar. Tente novamente."));
+            setErro(mensagemDeErro(falha, redefinindo ? "Não foi possível redefinir a senha. Tente novamente." : "Não foi possível entrar. Tente novamente."));
         } finally {
             setEnviando(false);
         }
@@ -67,11 +70,16 @@ export default function Autenticacao({ aoAutenticar }) {
 
             <div className="painel acesso-painel">
                 <div className="segmentos" role="group" aria-label="Tipo de acesso">
-                    <button type="button" aria-pressed={!criando} onClick={() => trocarModo("entrar")}>Entrar</button>
+                    <button type="button" aria-pressed={modo === "entrar"} onClick={() => trocarModo("entrar")}>Entrar</button>
                     <button type="button" aria-pressed={criando} onClick={() => trocarModo("criar")}>Criar conta</button>
                 </div>
 
                 <form onSubmit={enviar} noValidate className="formulario-empilhado">
+                    {redefinindo && (
+                        <Aviso tipo="info" titulo="Redefinir a senha">
+                            Informe o e-mail da conta e a nova senha. Para confirmar que a conta é sua, você assina o pedido com a carteira vinculada a ela na MetaMask. A assinatura não custa nada.
+                        </Aviso>
+                    )}
                     {criando && (
                         <Campo rotulo="Nome completo" erro={erros.nome}>
                             <input value={nome} autoComplete="name" onChange={(e) => setNome(e.target.value)} />
@@ -81,11 +89,11 @@ export default function Autenticacao({ aoAutenticar }) {
                         <input type="email" value={email} autoComplete="email" inputMode="email"
                             onChange={(e) => setEmail(e.target.value)} />
                     </Campo>
-                    <Campo rotulo="Senha" erro={erros.senha} ajuda={criando && !erros.senha ? "Mínimo de 8 caracteres." : undefined}>
-                        <input type="password" value={senha} autoComplete={criando ? "new-password" : "current-password"}
+                    <Campo rotulo={redefinindo ? "Nova senha" : "Senha"} erro={erros.senha} ajuda={senhaNova && !erros.senha ? "Mínimo de 8 caracteres." : undefined}>
+                        <input type="password" value={senha} autoComplete={senhaNova ? "new-password" : "current-password"}
                             onChange={(e) => setSenha(e.target.value)} />
                     </Campo>
-                    {criando && (
+                    {senhaNova && (
                         <Campo rotulo="Confirmar senha" erro={erros.confirmarSenha}>
                             <input type="password" value={confirmarSenha} autoComplete="new-password"
                                 onChange={(e) => setConfirmarSenha(e.target.value)} />
@@ -95,13 +103,21 @@ export default function Autenticacao({ aoAutenticar }) {
                     {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
                     <Botao type="submit" largo carregando={enviando}>
-                        {criando ? "Criar conta" : "Entrar"}
+                        {criando ? "Criar conta" : redefinindo ? "Assinar com a carteira e redefinir" : "Entrar"}
                     </Botao>
+                    {modo === "entrar" && (
+                        <Botao variante="fantasma" tamanho="p" onClick={() => trocarModo("redefinir")}>Esqueci a senha</Botao>
+                    )}
+                    {redefinindo && (
+                        <Botao variante="fantasma" tamanho="p" onClick={() => trocarModo("entrar")}>Voltar para entrar</Botao>
+                    )}
                 </form>
             </div>
 
             <p className="acesso-nota">
-                {criando
+                {redefinindo
+                    ? "A redefinição só funciona para contas com carteira vinculada. Se a conta ainda não tem carteira, ou você perdeu o acesso a ela, fale com o DETRAN."
+                    : criando
                     ? "Depois de criar a conta, conecte e vincule a sua carteira. O acesso é liberado quando o administrador da sua organização (ou o DETRAN, se você for o administrador) vincular a sua conta."
                     : "O acesso tem duas etapas: login e a carteira vinculada a uma organização credenciada no KMChain. Quem só quer consultar um veículo não precisa de conta."}
             </p>

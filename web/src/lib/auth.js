@@ -3,7 +3,7 @@
 // le nem guarda o token, so reage ao que cada rota devolve.
 import { BrowserProvider } from "ethers";
 import { chamarApi } from "./api";
-import { mensagemVinculo } from "./mensagens";
+import { mensagemRedefinirSenha, mensagemVinculo } from "./mensagens";
 
 const chamar = (rota, corpo) => chamarApi(`auth/${rota}`, { corpo });
 
@@ -37,4 +37,16 @@ export async function vincularCarteira(carteira, emailDaConta) {
     const assinatura = await assinante.signMessage(mensagemVinculo(carteira, emailDaConta, emitidoEm));
 
     return chamar("vincular-carteira", { carteira, emitidoEm, assinatura });
+}
+
+// Esqueci a senha: a carteira vinculada a conta assina o pedido, e isso
+// prova ao servidor que a conta e de quem pede. Nao ha envio de e-mail.
+export async function redefinirSenha(email, senha) {
+    if (!window.ethereum) throw new Error("Instale ou desbloqueie a MetaMask para assinar com a carteira vinculada à conta.");
+    const assinante = await new BrowserProvider(window.ethereum).getSigner();
+
+    const emitidoEm = Date.now();
+    const assinatura = await assinante.signMessage(mensagemRedefinirSenha(email, emitidoEm));
+
+    return chamar("redefinir-senha", { email, senha, emitidoEm, assinatura });
 }

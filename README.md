@@ -135,7 +135,7 @@ cd web && npm install && npm run dev
 
 O `web/` precisa de dois arquivos que não vão para o git:
 - **`.env`:** `VITE_RPC_URL`, `VITE_CHAIN_ID`, `VITE_EXPLORER`.
-- **`.env.local`:** `PINATA_JWT`, `GATEWAY`, `RPC_URL`, `DATABASE_URL`, `SESSION_SECRET` e `DOCS_KEY` (chave AES-256 de 32 bytes em base64). Opcionais: `DOCS_KEYS_ANTIGAS`, `KMCHAIN_ENDERECO`.
+- **`.env.local`:** `PINATA_JWT`, `GATEWAY`, `RPC_URL`, `DATABASE_URL`, `SESSION_SECRET` e `DOCS_KEY` (chave AES-256 de 32 bytes em base64). Opcionais: `DOCS_KEYS_ANTIGAS`, `KMCHAIN_ENDERECO` e `BANCO_VIA_WEBSOCKET=sim` (conecta ao Neon pela porta 443, para redes que bloqueiam a 5432).
 
 O `npm run dev` usa **o banco e a rede reais** configurados ali, e cria ou migra as tabelas na primeira chamada.
 
@@ -147,7 +147,7 @@ O `npm run dev` usa **o banco e a rede reais** configurados ali, e cria ou migra
 
 ```bash
 cd contratos && npx hardhat test    # 50 testes: contrato atual e a v1 (histórica)
-cd web && npm test                  # 101 testes: rotas /api de ponta a ponta
+cd web && npm test                  # 106 testes: rotas /api de ponta a ponta
 cd web && npx oxlint && npm run build
 ```
 

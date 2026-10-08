@@ -78,6 +78,9 @@ async function montarAcesso(usuario, carteira, regras) {
     if (!organizacao) {
         throw new ErroHttp(409, "organizacao_sem_cadastro", "A organização desta carteira não tem cadastro no KMChain. Fale com o DETRAN.");
     }
+    if (organizacao.removida_em) {
+        throw new ErroHttp(403, "organizacao_removida", "A sua organização foi removida do KMChain pelo DETRAN.");
+    }
     return { usuario, carteira: carteira.toLowerCase(), vinculo, organizacao };
 }
 

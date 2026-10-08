@@ -46,6 +46,20 @@ export const salvarVinculoSemConta = (carteira, organizacaoId, papel) => bd(
 export const removerVinculoSemConta = (carteira) =>
     bd("DELETE FROM vinculos_sem_conta WHERE carteira = lower($1)", [carteira]);
 
+// Tira da equipe a linha de uma carteira (com conta ou aguardando conta).
+// Devolve quem saiu, ou null se a carteira nao estava na equipe.
+export async function removerDaEquipe(organizacaoId, carteira) {
+    const r = await bd(
+        `DELETE FROM membros m USING usuarios u
+         WHERE u.id = m.usuario_id AND m.organizacao_id = $1 AND lower(m.carteira) = lower($2)
+         RETURNING u.id, u.nome`,
+        [organizacaoId, carteira]
+    );
+    const s = await bd("DELETE FROM vinculos_sem_conta WHERE organizacao_id = $1 AND carteira = lower($2) RETURNING carteira", [organizacaoId, carteira]);
+    if (r.rows.length === 0 && s.rows.length === 0) return null;
+    return { id: r.rows[0]?.id ?? null, nome: r.rows[0]?.nome ?? null };
+}
+
 export async function listarVinculosSemConta(organizacaoId) {
     const r = await bd("SELECT carteira, papel, criado_em FROM vinculos_sem_conta WHERE organizacao_id = $1 ORDER BY criado_em", [organizacaoId]);
     return r.rows;

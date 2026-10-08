@@ -10,7 +10,7 @@ import { ErroHttp } from "../nucleo/http.js";
 import { criarToken, definirCookieSessao, limparCookieSessao, sessaoAtual } from "../nucleo/sessao.js";
 import { exigirConta, vinculoDaCarteira } from "../servicos/autorizacao.js";
 import { espelharVinculoDaConta } from "../servicos/funcionarios.js";
-import { mensagemVinculo } from "../../src/lib/mensagens.js";
+import { mensagemRedefinirSenha, mensagemVinculo } from "../../src/lib/mensagens.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -94,8 +94,10 @@ export function sairDaConta(req, res) {
 // Associa a carteira MetaMask a conta de login. So registra QUEM e o dono da
 // carteira; nao cria vinculo com organizacao nenhuma.
 //
-// Uma carteira pertence a uma unica conta. Trocar de carteira e permitido:
-// a nova assinatura prova o controle da nova carteira e substitui a anterior.
+// Uma carteira pertence a uma unica conta. Trocar de carteira e permitido,
+// com a assinatura da nova, enquanto a atual nao tiver vinculo ativo com uma
+// organizacao: senao a conta ficaria com a carteira de uma organizacao e, no
+// banco, ainda na equipe da outra.
 export async function vincularCarteira(req, res) {
     const usuario = await exigirConta(req);
 
@@ -106,6 +108,10 @@ export async function vincularCarteira(req, res) {
     const assinante = recuperarAssinante(mensagemVinculo(carteira, usuario.email, emitidoEm), emitidoEm, assinatura);
     if (assinante.toLowerCase() !== carteira.toLowerCase()) {
         throw new ErroHttp(400, "assinatura_invalida", "A assinatura não corresponde à carteira informada.");
+    }
+
+    if (usuario.carteira && usuario.carteira.toLowerCase() !== carteira.toLowerCase() && (await vinculoDaCarteira(usuario.carteira)).ativo) {
+        throw new ErroHttp(409, "carteira_com_vinculo", "Sua conta já tem uma carteira com vínculo ativo em uma organização. Para usar esta carteira, entre com outra conta ou peça ao administrador para desativar o vínculo atual.");
     }
 
     const emUso = new ErroHttp(409, "carteira_em_uso", "Esta carteira já está vinculada a outra conta. Fale com o DETRAN.");
@@ -120,4 +126,26 @@ export async function vincularCarteira(req, res) {
         throw erro;
     }
     res.status(200).json({ ok: true, carteira: carteira.toLowerCase() });
+}
+
+// Esqueci a senha. Nao ha envio de e-mail: quem prova que a conta e sua e a
+// carteira vinculada a ela, assinando o pedido. A resposta e a mesma para
+// e-mail inexistente, conta sem carteira e carteira errada, de proposito.
+export async function redefinirSenha(req, res) {
+    const { emitidoEm, assinatura } = req.body ?? {};
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const senha = String(req.body?.senha ?? "");
+    if (!EMAIL_RE.test(email)) throw new ErroHttp(400, "email_invalido", "E-mail inválido.");
+    if (senha.length < 8) throw new ErroHttp(400, "senha_invalida", "A senha precisa ter pelo menos 8 caracteres.");
+
+    const assinante = recuperarAssinante(mensagemRedefinirSenha(email, emitidoEm), emitidoEm, assinatura);
+    const r = await bd("SELECT id, nome, email, carteira FROM usuarios WHERE email = $1", [email]);
+    const usuario = r.rows[0];
+    if (!usuario?.carteira || usuario.carteira.toLowerCase() !== assinante.toLowerCase()) {
+        throw new ErroHttp(403, "redefinicao_recusada", "A carteira que assinou não é a vinculada à conta deste e-mail.");
+    }
+
+    await bd("UPDATE usuarios SET senha_hash = $1 WHERE id = $2", [await bcrypt.hash(senha, 12), usuario.id]);
+    abrirSessao(res, usuario);
+    res.status(200).json({ usuario });
 }

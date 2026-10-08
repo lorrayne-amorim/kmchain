@@ -70,6 +70,18 @@ export const marcarCredenciada = (id, idCadeia, txHash, credenciadaEm) => bd(
 export const definirSituacao = (id, situacao) =>
     bd("UPDATE organizacoes SET situacao = $2 WHERE id = $1", [id, situacao]);
 
+// Organizacao que nunca foi credenciada: nada em cadeia aponta para ela.
+export const apagarPendente = (id) => bd(
+    `WITH nomes AS (DELETE FROM organizacao_nomes WHERE organizacao_id = $1)
+     DELETE FROM organizacoes WHERE id = $1 AND id_cadeia IS NULL`,
+    [id]
+);
+
+// Organizacao credenciada: a linha fica (os eventos apontam para ela) e so
+// deixa de aparecer nas listas e no mapa.
+export const marcarRemovida = (id) =>
+    bd("UPDATE organizacoes SET removida_em = now(), situacao = 'suspensa' WHERE id = $1", [id]);
+
 // Carteira do administrador indicado, enquanto a organizacao esta pendente.
 export const definirCarteiraDoIndicado = (usuarioId, carteira) => bd(
     "UPDATE organizacoes SET administrador_carteira = lower($2) WHERE administrador_id = $1 AND id_cadeia IS NULL",
@@ -82,6 +94,7 @@ export async function listarOrganizacoesPublicas() {
     const r = await bd(
         `SELECT o.id, o.id_cadeia, o.tipo, o.nome_fantasia, o.cep, o.logradouro, o.numero, o.complemento,
                 o.bairro, o.municipio_ibge, o.latitude, o.longitude, o.situacao, o.credenciada_em,
+                (o.removida_em IS NOT NULL) AS removida,
                 (SELECT json_agg(json_build_object('nome', n.nome_fantasia, 'desde', n.vigente_desde) ORDER BY n.vigente_desde, n.id)
                  FROM organizacao_nomes n WHERE n.organizacao_id = o.id) AS nomes
          FROM organizacoes o
@@ -101,6 +114,7 @@ export async function listarOrganizacoesCompletas() {
                 (SELECT count(*)::int FROM membros m WHERE m.organizacao_id = o.id AND m.ativo) AS funcionarios_ativos
          FROM organizacoes o
          LEFT JOIN usuarios u ON u.id = o.administrador_id
+         WHERE o.removida_em IS NULL
          ORDER BY (o.situacao = 'pendente') DESC, o.nome_fantasia`
     );
     return r.rows;

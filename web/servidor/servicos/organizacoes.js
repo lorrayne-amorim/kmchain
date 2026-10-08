@@ -68,6 +68,14 @@ export async function definirCarteiraDaConta(email, carteira, acesso) {
     const dona = await buscarContaPorCarteira(carteira);
     if (dona && dona.id !== conta.id) throw emUso;
     if (dona) return dona;
+    // Cada carteira pertence a uma organizacao: trocar a carteira da conta pela
+    // de outra organizacao deixaria a mesma pessoa em duas equipes no banco.
+    if (conta.carteira) {
+        const [atual, nova] = await Promise.all([vinculoDaCarteira(conta.carteira), vinculoDaCarteira(carteira)]);
+        if (atual.ativo && nova.ativo && nova.organizacao !== atual.organizacao) {
+            throw new ErroHttp(409, "conta_em_outra_organizacao", "Esta carteira tem vínculo ativo com outra organização, diferente da organização desta conta.", { campos: { carteira: "Carteira de outra organização." } });
+        }
+    }
 
     try {
         await definirCarteira(conta.id, carteira);
@@ -181,7 +189,7 @@ export async function confirmarCredenciamento(id, txHash, acesso) {
 // que o DETRAN suspende ou reativa a organizacao.
 export async function sincronizarOrganizacaoComContrato(id, acesso) {
     const organizacao = await organizacoes.buscarOrganizacao(Number(id));
-    if (!organizacao || organizacao.id_cadeia === null) {
+    if (!organizacao || organizacao.id_cadeia === null || organizacao.removida_em) {
         throw new ErroHttp(404, "organizacao_nao_encontrada", "Organização não encontrada ou ainda não credenciada.");
     }
     const emCadeia = await naRede(contrato().getOrganizacao(organizacao.id_cadeia));
@@ -202,7 +210,7 @@ export async function sincronizarOrganizacaoComContrato(id, acesso) {
 // o tipo esta gravado em cadeia e define o que a organizacao pode registrar.
 export async function atualizarCadastroDaOrganizacao(id, corpo, acesso) {
     const organizacao = await organizacoes.buscarOrganizacao(Number(id));
-    if (!organizacao || organizacao.tipo === "DETRAN") {
+    if (!organizacao || organizacao.tipo === "DETRAN" || organizacao.removida_em) {
         throw new ErroHttp(404, "organizacao_nao_encontrada", "Organização não encontrada.");
     }
     const dados = validarDadosDaOrganizacao({ ...corpo, tipo: organizacao.tipo, cnpj: organizacao.cnpj });
@@ -211,6 +219,30 @@ export async function atualizarCadastroDaOrganizacao(id, corpo, acesso) {
         nome: atualizada.nome_fantasia, nomeAnterior: atualizada.nomes_novos ? organizacao.nome_fantasia : undefined
     });
     return atualizada;
+}
+
+// Remove a organizacao da gestao. O contrato nao apaga organizacoes, so as
+// suspende: a que nunca foi credenciada e apagada do banco; a credenciada
+// precisa estar suspensa em cadeia e fica guardada, fora das listas e do
+// mapa, porque os eventos que registrou continuam no historico.
+export async function removerOrganizacao(id, acesso) {
+    const organizacao = await organizacoes.buscarOrganizacao(Number(id));
+    if (!organizacao || organizacao.tipo === "DETRAN" || organizacao.removida_em) {
+        throw new ErroHttp(404, "organizacao_nao_encontrada", "Organização não encontrada.");
+    }
+    if (organizacao.id_cadeia === null) {
+        await organizacoes.apagarPendente(organizacao.id);
+    } else {
+        const emCadeia = await naRede(contrato().getOrganizacao(organizacao.id_cadeia));
+        if (emCadeia.ativa) {
+            throw new ErroHttp(409, "organizacao_ativa", "A organização ainda está ativa no contrato. Suspenda-a antes de remover.");
+        }
+        await organizacoes.marcarRemovida(organizacao.id);
+    }
+    await registrarAuditoria(ACOES.ORGANIZACAO_REMOVIDA, acesso, { tipo: "organizacao", id: organizacao.id }, {
+        nome: organizacao.nome_fantasia, tipo: organizacao.tipo
+    });
+    return { id: organizacao.id, apagada: organizacao.id_cadeia === null };
 }
 
 export const listarOrganizacoesPublicas = organizacoes.listarOrganizacoesPublicas;

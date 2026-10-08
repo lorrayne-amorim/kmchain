@@ -20,3 +20,7 @@ export const mensagemVinculo = (carteira, email, emitidoEm) =>
 
 export const mensagemAlteracao = (chassi, campo, email, emitidoEm) =>
     `KmChain: registrar alteração de ${campo} do veículo ${chassi} pela conta ${email} em ${emitidoEm}`;
+
+// Sem sessao: quem assina e a carteira vinculada a conta do e-mail informado.
+export const mensagemRedefinirSenha = (email, emitidoEm) =>
+    `KmChain: redefinir a senha da conta ${email} em ${emitidoEm}`;

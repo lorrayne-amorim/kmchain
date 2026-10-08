@@ -79,3 +79,16 @@ export async function definirFuncionario(carteira, ativo, aoMudarPasso = () => {
     await assinar((contrato) => contrato.definirFuncionario(carteira, ativo), aoMudarPasso);
     return sincronizarVinculo(carteira);
 }
+
+// O contrato nao apaga nada, so suspende e desativa. Remover e tirar das
+// listas o que ja esta parado em cadeia; os eventos registrados continuam.
+
+// A organizacao credenciada ainda ativa e suspensa antes, com a assinatura do DETRAN.
+export async function removerOrganizacao(organizacao, aoMudarPasso = () => {}) {
+    if (organizacao.situacao === "ativa") await definirSituacaoDaOrganizacao(organizacao, false, aoMudarPasso);
+    return chamarApi("organizacoes/remover", { corpo: { id: organizacao.id }, padrao: "Não foi possível remover a organização." });
+}
+
+// Tira da equipe quem ja esta com o vinculo desativado no contrato.
+export const removerFuncionario = (carteira, organizacaoId) =>
+    chamarApi("funcionarios/remover", { corpo: { carteira, organizacaoId }, padrao: "Não foi possível remover da equipe." });

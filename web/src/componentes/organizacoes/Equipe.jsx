@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { mensagemDeErro } from "../../lib/erros";
 import { carteiraValida, encurtar } from "../../lib/formato";
-import { definirFuncionario, listarFuncionarios, localizarConta } from "../../lib/organizacoes";
+import { definirFuncionario, listarFuncionarios, localizarConta, removerFuncionario } from "../../lib/organizacoes";
 import { avisar } from "../../lib/toast";
 import Aviso from "../../ui/Aviso";
 import Botao from "../../ui/Botao";
 import Campo from "../../ui/Campo";
+import Dialogo from "../../ui/Dialogo";
 import { Vazio } from "../../ui/Pagina";
 import Tabela from "../../ui/Tabela";
 import { Progresso } from "../../ui/Transacao";
@@ -13,9 +14,10 @@ import { Progresso } from "../../ui/Transacao";
 // Funcionarios de uma organizacao. O administrador vincula uma pessoa pelo
 // e-mail da conta ou direto pela carteira (quem ainda nao tem conta entra na
 // equipe ao vincular essa carteira) e ativa ou desativa cada um, assinando
-// no contrato.
-// Com `organizacaoId`, e a consulta do DETRAN a equipe de outra organizacao,
-// sem acoes.
+// no contrato. Tambem remove da lista: o contrato so desativa, entao quem
+// ainda esta ativo e desativado antes.
+// Com `organizacaoId`, e a consulta do DETRAN a equipe de outra organizacao:
+// ele nao assina por ela, so remove da lista quem ja esta desativado.
 export default function Equipe({ organizacaoId, usuario }) {
     const somenteLeitura = Boolean(organizacaoId);
     const [equipe, setEquipe] = useState(null);
@@ -25,6 +27,7 @@ export default function Equipe({ organizacaoId, usuario }) {
     const [passo, setPasso] = useState(null);
     const [alvo, setAlvo] = useState(null); // carteira em alteracao
     const [falha, setFalha] = useState("");
+    const [removendo, setRemovendo] = useState(null); // quem aguarda a confirmacao da remocao
 
     const carregar = useCallback(async () => {
         setErro("");
@@ -55,6 +58,25 @@ export default function Equipe({ organizacaoId, usuario }) {
         }
     }
 
+    async function confirmarRemocao() {
+        const f = removendo;
+        setRemovendo(null);
+        setFalha("");
+        setAlvo(f.carteira);
+        try {
+            if (f.ativo) await definirFuncionario(f.carteira, false, setPasso);
+            // A carteira que aguardava conta ja sai da lista ao ser desativada.
+            if (!f.aguardando) await removerFuncionario(f.carteira, organizacaoId);
+            avisar(f.aguardando ? "Carteira removida da equipe." : `${f.nome} foi removido da equipe.`);
+        } catch (e) {
+            setFalha(mensagemDeErro(e, "Não foi possível remover da equipe. Tente novamente."));
+        } finally {
+            setPasso(null);
+            setAlvo(null);
+            await carregar();
+        }
+    }
+
     async function vincular(e) {
         e.preventDefault();
         setErroEmail("");
@@ -78,16 +100,24 @@ export default function Equipe({ organizacaoId, usuario }) {
 
     const situacao = (f) => <span className={`etiqueta-status ${f.ativo ? "situacao-ativa" : "situacao-suspensa"}`}>{f.ativo ? "Ativo" : "Desativado"}</span>;
     const acoes = (f) => {
-        if (somenteLeitura || f.papel === "administrador") return null;
-        return f.ativo
-            ? <Botao variante="fantasma" tamanho="p" className="texto-perigo" carregando={alvo === f.carteira} onClick={() => alterarVinculo(f.carteira, false, `${f.nome} foi desativado.`)}>Desativar</Botao>
-            : <Botao variante="fantasma" tamanho="p" carregando={alvo === f.carteira} onClick={() => alterarVinculo(f.carteira, true, `${f.nome} foi reativado.`)}>Reativar</Botao>;
+        // O administrador so sai depois que o DETRAN retira a administracao dele.
+        if (f.papel === "administrador") return null;
+        const remover = <Botao variante="fantasma" tamanho="p" className="texto-perigo" disabled={Boolean(alvo)} onClick={() => setRemovendo(f)}>Remover</Botao>;
+        if (somenteLeitura) return f.ativo ? null : remover;
+        return (
+            <span className="acoes">
+                {f.ativo
+                    ? <Botao variante="fantasma" tamanho="p" carregando={alvo === f.carteira} disabled={Boolean(alvo)} onClick={() => alterarVinculo(f.carteira, false, `${f.nome} foi desativado.`)}>Desativar</Botao>
+                    : <Botao variante="fantasma" tamanho="p" carregando={alvo === f.carteira} disabled={Boolean(alvo)} onClick={() => alterarVinculo(f.carteira, true, `${f.nome} foi reativado.`)}>Reativar</Botao>}
+                {remover}
+            </span>
+        );
     };
     const papel = (f) => (f.papel === "administrador" ? "Administrador" : "Funcionário");
     // Quem tem conta e, depois, as carteiras vinculadas que ainda aguardam conta.
     const funcionarios = [
         ...(equipe?.funcionarios ?? []),
-        ...(equipe?.aguardando ?? []).map((a) => ({ ...a, id: a.carteira, nome: "Aguardando criação de conta", email: "", ativo: true }))
+        ...(equipe?.aguardando ?? []).map((a) => ({ ...a, id: a.carteira, nome: "Aguardando criação de conta", email: "", ativo: true, aguardando: true }))
     ];
 
     return (
@@ -132,6 +162,27 @@ export default function Equipe({ organizacaoId, usuario }) {
                     />
                 )}
             </div>
+
+            <Dialogo
+                aberto={Boolean(removendo)}
+                aoFechar={() => setRemovendo(null)}
+                titulo="Remover da equipe"
+                acoes={
+                    <>
+                        <Botao variante="secundario" onClick={() => setRemovendo(null)}>Cancelar</Botao>
+                        <Botao variante="perigo" onClick={confirmarRemocao}>{removendo?.ativo ? "Desativar e remover" : "Remover"}</Botao>
+                    </>
+                }
+            >
+                {removendo && (
+                    <p>
+                        {removendo.aguardando ? <>A carteira <span className="mono">{encurtar(removendo.carteira)}</span></> : <strong>{removendo.nome}</strong>} sai
+                        da lista da equipe.
+                        {removendo.ativo && " Antes, você assina no contrato a desativação do vínculo."}
+                        {" "}Os eventos já registrados continuam no histórico e a remoção fica na auditoria.
+                    </p>
+                )}
+            </Dialogo>
         </div>
     );
 }

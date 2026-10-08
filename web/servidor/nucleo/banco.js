@@ -8,21 +8,29 @@ import { indisponivel, ehFalhaDeRede } from "./http.js";
 
 const { Pool } = pg;
 
+// Redes que bloqueiam a saida pela porta 5432 (laboratorios, empresas) nao
+// alcancam o Postgres. Com BANCO_VIA_WEBSOCKET=sim no .env.local, a conexao
+// com o Neon vai por WebSocket na porta 443. So para desenvolvimento: a
+// producao nao define a variavel e segue no driver comum.
+async function criarPool() {
+    const Classe = process.env.BANCO_VIA_WEBSOCKET === "sim"
+        ? (await import("@neondatabase/serverless")).Pool
+        : Pool;
+    return new Classe({
+        connectionString: process.env.DATABASE_URL,
+        // A maioria dos provedores gerenciados (Neon, Supabase, Vercel
+        // Postgres) exige TLS mas usa certificado que o driver nao valida
+        // por padrao; sslmode=require na URL ja cobre a maioria dos casos.
+        ssl: process.env.DATABASE_URL.includes("sslmode=disable")
+            ? false
+            : { rejectUnauthorized: false }
+    });
+}
+
 let pool;
 function conexao() {
-    if (!pool) {
-        if (!process.env.DATABASE_URL) throw indisponivel("banco_nao_configurado");
-        pool = new Pool({
-            connectionString: process.env.DATABASE_URL,
-            // A maioria dos provedores gerenciados (Neon, Supabase, Vercel
-            // Postgres) exige TLS mas usa certificado que o driver nao valida
-            // por padrao; sslmode=require na URL ja cobre a maioria dos casos.
-            ssl: process.env.DATABASE_URL.includes("sslmode=disable")
-                ? false
-                : { rejectUnauthorized: false }
-        });
-    }
-    return pool;
+    if (!process.env.DATABASE_URL) throw indisponivel("banco_nao_configurado");
+    return (pool ??= criarPool());
 }
 
 // Ambiente local de demonstracao (DATABASE_URL=pglite:memoria): Postgres em
@@ -47,8 +55,8 @@ async function consultaLocal(texto, valores) {
 // Os testes trocam o Postgres real por um em memoria (PGlite); o resto do
 // codigo so conhece `bd()`.
 const executorPadrao = {
-    consulta: (texto, valores) => (ehLocal() ? consultaLocal(texto, valores) : conexao().query(texto, valores)),
-    script: async (texto) => (ehLocal() ? (await bancoLocal()).exec(texto) : conexao().query(texto))
+    consulta: async (texto, valores) => (ehLocal() ? consultaLocal(texto, valores) : (await conexao()).query(texto, valores)),
+    script: async (texto) => (ehLocal() ? (await bancoLocal()).exec(texto) : (await conexao()).query(texto))
 };
 let executor = executorPadrao;
 let migrado = null;
@@ -369,6 +377,10 @@ const MIGRACAO = `
         criado_em       TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS auditoria_criado_idx ON auditoria (criado_em);
+
+    -- Organizacao removida pelo DETRAN: sai das listas e do mapa, mas a linha
+    -- fica, porque os eventos ja registrados continuam apontando para ela.
+    ALTER TABLE organizacoes ADD COLUMN IF NOT EXISTS removida_em TIMESTAMPTZ;
 `;
 
 // Cria as tabelas na primeira consulta de cada instancia quente do servidor.

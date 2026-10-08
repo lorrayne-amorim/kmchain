@@ -28,7 +28,7 @@ export default function MapaOrganizacoes() {
     useEffect(() => {
         let ativo = true;
         listarOrganizacoes()
-            .then((lista) => ativo && setOrganizacoes(lista.filter((o) => o.tipo !== "DETRAN")))
+            .then((lista) => ativo && setOrganizacoes(lista.filter((o) => o.tipo !== "DETRAN" && !o.removida)))
             .catch((e) => ativo && setErro(mensagemDeErro(e, "Não foi possível carregar as organizações.")));
         return () => { ativo = false; };
     }, []);

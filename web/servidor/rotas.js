@@ -19,6 +19,7 @@ export const ROTAS = {
     "auth/entrar": { POST: auth.entrar },
     "auth/eu": { GET: auth.sessaoDaConta, DELETE: auth.sairDaConta },
     "auth/vincular-carteira": { POST: auth.vincularCarteira },
+    "auth/redefinir-senha": { POST: auth.redefinirSenha },
     "auth/pendentes": { POST: organizacoes.listarContas },
     "contas/localizar": { POST: organizacoes.localizarConta },
     "contas/carteira": { POST: organizacoes.definirCarteira },
@@ -27,8 +28,10 @@ export const ROTAS = {
     "organizacoes/gestao": { GET: organizacoes.listarParaGestao },
     "organizacoes/credenciamento": { POST: organizacoes.confirmarCredenciamento },
     "organizacoes/sincronizar": { POST: organizacoes.sincronizar },
+    "organizacoes/remover": { POST: organizacoes.remover },
     "funcionarios": { GET: organizacoes.listarEquipe },
     "funcionarios/sincronizar": { POST: organizacoes.sincronizarEquipe },
+    "funcionarios/remover": { POST: organizacoes.removerDaEquipe },
 
     "eventos": { GET: eventos.listar, POST: eventos.registrar },
     "eventos/conferir": { POST: eventos.conferir },

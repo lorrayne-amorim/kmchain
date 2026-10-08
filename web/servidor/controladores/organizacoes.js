@@ -3,7 +3,7 @@ import { bd } from "../nucleo/banco.js";
 import { ErroHttp, parametro } from "../nucleo/http.js";
 import { buscarOrganizacao } from "../repositorios/organizacoes.js";
 import { SO_DETRAN, ehDetran, exigirMembro, exigirMembroComAssinatura } from "../servicos/autorizacao.js";
-import { listarFuncionarios, sincronizarVinculo } from "../servicos/funcionarios.js";
+import { listarFuncionarios, removerVinculo, sincronizarVinculo } from "../servicos/funcionarios.js";
 import * as servico from "../servicos/organizacoes.js";
 import { mensagemContas } from "../../src/lib/mensagens.js";
 
@@ -44,6 +44,12 @@ export async function confirmarCredenciamento(req, res) {
 export async function sincronizar(req, res) {
     const acesso = await exigirMembro(req, { tipos: SO_DETRAN });
     res.status(200).json({ organizacao: await servico.sincronizarOrganizacaoComContrato(req.body?.id, acesso) });
+}
+
+// POST /api/organizacoes/remover: o DETRAN tira a organizacao da gestao.
+export async function remover(req, res) {
+    const acesso = await exigirMembro(req, { tipos: SO_DETRAN });
+    res.status(200).json(await servico.removerOrganizacao(req.body?.id, acesso));
 }
 
 // POST /api/auth/pendentes: contas cadastradas, para o DETRAN localizar quem
@@ -93,4 +99,11 @@ export async function listarEquipe(req, res) {
 export async function sincronizarEquipe(req, res) {
     const acesso = await exigirMembro(req);
     res.status(200).json({ funcionario: await sincronizarVinculo(req.body?.carteira, acesso) });
+}
+
+// POST /api/funcionarios/remover: tira da equipe quem ja esta desativado no
+// contrato (o administrador, na propria organizacao; o DETRAN, em qualquer uma).
+export async function removerDaEquipe(req, res) {
+    const acesso = await exigirMembro(req);
+    res.status(200).json({ removido: await removerVinculo(req.body?.carteira, req.body?.organizacaoId, acesso) });
 }

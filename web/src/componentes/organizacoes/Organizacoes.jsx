@@ -3,12 +3,13 @@ import { mensagemDeErro } from "../../lib/erros";
 import { rotuloDaOrganizacao } from "../../lib/eventos";
 import { carteiraValida, encurtar } from "../../lib/formato";
 import { SITUACOES, enderecoEmLinha, formatarCnpj } from "../../lib/organizacao";
-import { credenciarOrganizacao, definirCarteiraDaConta, definirSituacaoDaOrganizacao, listarOrganizacoesParaGestao } from "../../lib/organizacoes";
+import { credenciarOrganizacao, definirCarteiraDaConta, definirSituacaoDaOrganizacao, listarOrganizacoesParaGestao, removerOrganizacao } from "../../lib/organizacoes";
 import { avisar } from "../../lib/toast";
 import { useMunicipios } from "../../lib/useMunicipios";
 import Aviso from "../../ui/Aviso";
 import Botao from "../../ui/Botao";
 import Campo from "../../ui/Campo";
+import Dialogo from "../../ui/Dialogo";
 import { Vazio } from "../../ui/Pagina";
 import Tabela from "../../ui/Tabela";
 import { Progresso } from "../../ui/Transacao";
@@ -26,7 +27,7 @@ function administradoresDe(o) {
 }
 
 // Gestao das organizacoes pelo DETRAN: cadastrar, credenciar, suspender,
-// reativar, definir administradores e consultar a equipe. Credenciamento,
+// reativar, remover, definir administradores e consultar a equipe. Credenciamento,
 // situacao e administradores sao gravados no contrato; o cadastro, no banco.
 export default function Organizacoes({ usuario }) {
     const [modo, setModo] = useState("lista"); // lista | mapa | nova | editar | detalhe
@@ -142,6 +143,7 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
     const [carteira, setCarteira] = useState("");
     const [erroCarteira, setErroCarteira] = useState("");
     const [versaoDaEquipe, setVersaoDaEquipe] = useState(0);
+    const [confirmandoRemocao, setConfirmandoRemocao] = useState(false);
     const municipios = useMunicipios();
     const pendente = o.id_cadeia === null;
 
@@ -157,6 +159,22 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
         } finally {
             setPasso(null);
         }
+    }
+
+    // A organizacao ativa e suspensa no contrato antes de sair da gestao.
+    async function remover() {
+        setConfirmandoRemocao(false);
+        setFalha("");
+        try {
+            await removerOrganizacao(o, setPasso);
+        } catch (e) {
+            setFalha(mensagemDeErro(e, "Não foi possível remover a organização. Tente novamente."));
+            setPasso(null);
+            return aoAtualizar(); // a suspensao pode ter sido assinada antes da falha
+        }
+        avisar("Organização removida.");
+        aoVoltar();
+        await aoAtualizar();
     }
 
     // Antes do credenciamento: grava a carteira da conta indicada como administradora.
@@ -252,12 +270,32 @@ function DetalheDaOrganizacao({ organizacao: o, usuario, aoVoltar, aoEditar, aoA
                             <Botao onClick={() => executar(() => definirSituacaoDaOrganizacao(o, true, setPasso), "Organização reativada.")}>Reativar</Botao>
                         )}
                         <Botao variante="secundario" onClick={aoEditar}>Editar cadastro</Botao>
+                        <Botao variante="fantasma" className="texto-perigo" onClick={() => setConfirmandoRemocao(true)}>Remover</Botao>
                     </div>
                 )}
                 {o.situacao === "ativa" && (
                     <p className="campo-ajuda">Suspender impede novos registros da organização. Os eventos já registrados continuam no histórico.</p>
                 )}
             </section>
+
+            <Dialogo
+                aberto={confirmandoRemocao}
+                aoFechar={() => setConfirmandoRemocao(false)}
+                titulo="Remover organização"
+                acoes={
+                    <>
+                        <Botao variante="secundario" onClick={() => setConfirmandoRemocao(false)}>Cancelar</Botao>
+                        <Botao variante="perigo" onClick={remover}>{o.situacao === "ativa" ? "Suspender e remover" : "Remover"}</Botao>
+                    </>
+                }
+            >
+                <p>
+                    <strong>{o.nome_fantasia}</strong> sai da gestão{pendente ? " e o cadastro é apagado." : ", da lista pública e do mapa."}
+                    {o.situacao === "ativa" && " Antes, você assina no contrato a suspensão da organização."}
+                    {!pendente && " Os eventos que ela registrou continuam no histórico dos veículos, com o nome dela."}
+                    {" "}Não é possível desfazer por esta tela.
+                </p>
+            </Dialogo>
 
             {!pendente && (
                 <>
