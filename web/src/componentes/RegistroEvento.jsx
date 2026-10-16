@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { contratoEscrita } from "../lib/blockchain";
 import { chaveDoChassi } from "../lib/chassi";
 import { enviarDocumento } from "../lib/documentos";
-import { mensagemDeErro } from "../lib/erros";
+import { mensagemDeErro, revertDoContrato } from "../lib/erros";
 import { TIPO_EVENTO, TIPO_ORGANIZACAO, eventosRegistraveis, rotuloDoEvento } from "../lib/eventos";
 import { focarPrimeiroErro } from "../lib/foco";
 import { HASH_VAZIO, agoraLocal, dataHora, formatarCpf, km, localParaIso, localParaSegundos, normalizarChassi, numero, validarChassi } from "../lib/formato";
@@ -271,8 +271,9 @@ export default function RegistroEvento({ acesso, aoVerHistorico }) {
             // SEGUNDA CONFIRMACAO - so aparece quando o proprio contrato recusa o
             // avanco por estar acima do limite. Os numeros vem do erro do contrato,
             // nao de uma conta feita aqui.
-            if (e.revert?.name === "LeituraAtipica") {
-                const [avancoContrato, limite, dias] = e.revert.args;
+            const revert = revertDoContrato(e);
+            if (revert?.name === "LeituraAtipica") {
+                const [avancoContrato, limite, dias] = revert.args;
                 setAtipica({ avanco: Number(avancoContrato), limite: Number(limite), dias: Number(dias) });
                 setEtapa("revisao");
                 return;

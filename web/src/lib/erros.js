@@ -1,7 +1,24 @@
 // Traduz erros de carteira, rede e contrato para mensagens que a pessoa
 // consegue entender e agir. Nunca devolve texto tecnico cru (revert data,
 // codigos do ethers etc.).
+import { Interface } from "ethers";
 import { ErroApi } from "./api";
+import abi from "./KmChainRegistryV2.abi.json";
+
+const contrato = new Interface(abi);
+
+// O ethers so decodifica os erros customizados do contrato em staticCall. Ao
+// enviar uma transacao, o revert da estimativa de gas chega com os bytes do
+// erro em `data` e `revert` vazio; aqui os dois casos viram { name, args }.
+export function revertDoContrato(erro) {
+    if (erro?.revert) return erro.revert;
+    if (typeof erro?.data !== "string") return null;
+    try {
+        return contrato.parseError(erro.data);
+    } catch {
+        return null;
+    }
+}
 
 const REVERTS = {
     VeiculoJaCadastrado: "Este chassi já está cadastrado.",
@@ -40,7 +57,7 @@ export function mensagemDeErro(erro, padrao = "Não foi possível concluir a ope
         return "Não foi possível conectar à rede. Verifique sua conexão e tente novamente.";
     }
 
-    const revert = erro.revert?.name;
+    const revert = revertDoContrato(erro)?.name;
     if (revert && REVERTS[revert]) return REVERTS[revert];
 
     // Erros lancados pelo proprio front/API ja vem em portugues e sem codigo.
