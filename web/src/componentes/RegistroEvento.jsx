@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { contratoEscrita } from "../lib/blockchain";
+import { contaConectada, contratoEscrita, contratoLeitura } from "../lib/blockchain";
 import { chaveDoChassi } from "../lib/chassi";
 import { enviarDocumento } from "../lib/documentos";
 import { mensagemDeErro, revertDoContrato } from "../lib/erros";
@@ -74,6 +74,7 @@ export default function RegistroEvento({ acesso, aoVerHistorico }) {
     const [passo, setPasso] = useState(null);
     const [enviaDocumento, setEnviaDocumento] = useState(false);
     const [atipica, setAtipica] = useState(null);
+    const [atipicaPrevista, setAtipicaPrevista] = useState(null);
     const [hashDoc, setHashDoc] = useState(null);
     const [falha, setFalha] = useState("");
     const [concluido, setConcluido] = useState(null);
@@ -191,6 +192,7 @@ export default function RegistroEvento({ acesso, aoVerHistorico }) {
                 localizacao: capturada, justificativaLocalizacao
             });
             setVerificacao(r.localizacao);
+            setAtipicaPrevista(await preverAtipica());
             setEtapa("revisao");
             window.scrollTo(0, 0);
         } catch (erro) {
@@ -210,9 +212,32 @@ export default function RegistroEvento({ acesso, aoVerHistorico }) {
         }
     }
 
+    const argumentosDoEvento = (hash, confirmarAtipica) => [
+        chaveDoChassi(chassi), BigInt(kmNova), tipo, localParaSegundos(dataEvento), Number(municipio), hash, confirmarAtipica
+    ];
+
+    // Simula o registro no contrato, pela carteira conectada, para mostrar o
+    // avanco acima do limite ja na revisao. Os numeros vem do erro do
+    // contrato. Se a simulacao nao der certo por outro motivo, o envio ainda
+    // trata o mesmo erro.
+    async function preverAtipica() {
+        try {
+            const conta = await contaConectada();
+            if (!conta) return null;
+            await contratoLeitura().registrarEvento.staticCall(...argumentosDoEvento(HASH_VAZIO, false), { from: conta });
+            return null;
+        } catch (e) {
+            const revert = revertDoContrato(e);
+            if (revert?.name !== "LeituraAtipica") return null;
+            const [avancoContrato, limite, dias] = revert.args;
+            return { avanco: Number(avancoContrato), limite: Number(limite), dias: Number(dias) };
+        }
+    }
+
     function voltar() {
         setEtapa("formulario");
         setAtipica(null);
+        setAtipicaPrevista(null);
         setFalha("");
     }
 
@@ -236,9 +261,7 @@ export default function RegistroEvento({ acesso, aoVerHistorico }) {
 
             setPasso("assinatura");
             const contrato = await contratoEscrita();
-            const tx = await contrato.registrarEvento(
-                chaveDoChassi(chassi), BigInt(kmNova), tipo, localParaSegundos(dataEvento), Number(municipio), hash, confirmarAtipica
-            );
+            const tx = await contrato.registrarEvento(...argumentosDoEvento(hash, confirmarAtipica));
 
             setPasso("confirmacao");
             const recibo = await tx.wait();
@@ -393,6 +416,14 @@ export default function RegistroEvento({ acesso, aoVerHistorico }) {
                         O registro será recusado. Volte e corrija o valor informado.
                     </Aviso>
                 )}
+                {atipicaPrevista && (
+                    <Aviso tipo="alerta" titulo="Avanço acima do esperado">
+                        Este registro representa {km(atipicaPrevista.avanco)} a mais que o anterior
+                        em {atipicaPrevista.dias} {atipicaPrevista.dias === 1 ? "dia" : "dias"}, acima do limite
+                        de {km(atipicaPrevista.limite)} para este veículo no período. Se confirmado, ficará marcado
+                        como atípico no histórico público.
+                    </Aviso>
+                )}
                 {!regressiva && (
                     <Aviso tipo="info" titulo="O que vai para a blockchain">
                         Quilometragem, tipo, data e hora do evento, município, o identificador da sua organização, a
@@ -409,7 +440,9 @@ export default function RegistroEvento({ acesso, aoVerHistorico }) {
                 ) : (
                     <div className="acoes acoes-fim">
                         <Botao variante="secundario" onClick={voltar}>Voltar e editar</Botao>
-                        <Botao disabled={regressiva} onClick={() => enviar(false)}>Confirmar e assinar</Botao>
+                        <Botao disabled={regressiva} onClick={() => (atipicaPrevista ? setAtipica(atipicaPrevista) : enviar(false))}>
+                            Confirmar e assinar
+                        </Botao>
                     </div>
                 )}
 
